@@ -787,22 +787,24 @@ def extract_logical_to_physical(qc_in, qc_out):
         except Exception:
             # Version-agnostic fallback: build logical->physical from whatever orientation init exposes
             # Try to get a dict {phys:int -> virt:Qubit}
-            ptov = getattr(init, "get_virtual_bits", lambda: None)()
-            if ptov is not None:
-                logical_to_physical = [None] * qc_out.num_qubits
-                for phys, virt in ptov.items():
-                    logical_to_physical[virt.index] = phys
-            else:
-                # Final fallback: inspect items() and detect orientation by key type
-                logical_to_physical = [None] * qc_out.num_qubits
-                for k, v in init.items():
-                    if isinstance(k, int):       # phys -> virt
-                        phys, virt = k, v
-                    else:                        # virt -> phys
-                        phys, virt = v, k
-                    logical_to_physical[virt.index] = phys
-                # Invert at the end of the function
-                return invert_permutation(logical_to_physical)
+            print(Exception)
+
+            # ptov = getattr(init, "get_virtual_bits", lambda: None)()
+            # if ptov is not None:
+            #     logical_to_physical = [None] * qc_out.num_qubits
+            #     for phys, virt in ptov.items():
+            #         logical_to_physical[virt.index] = phys
+            # else:
+            #     # Final fallback: inspect items() and detect orientation by key type
+            #     logical_to_physical = [None] * qc_out.num_qubits
+            #     for k, v in init.items():
+            #         if isinstance(k, int):       # phys -> virt
+            #             phys, virt = k, v
+            #         else:                        # virt -> phys
+            #             phys, virt = v, k
+            #         logical_to_physical[virt.index] = phys
+            #     # Invert at the end of the function
+            #     return invert_permutation(logical_to_physical)
 
         # Apply routing permutation if present: pre-physical -> final-physical
         try:

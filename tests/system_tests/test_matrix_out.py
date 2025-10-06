@@ -1,6 +1,6 @@
 import unittest
 import qiskit
-from brickwork_transpiler import circuits, brickwork_transpiler, visualiser
+from brickwork_transpiler import circuits, brickwork_transpiler
 
 
 class TestSingleGates(unittest.TestCase):
@@ -41,10 +41,6 @@ class TestSingleGates(unittest.TestCase):
                                                        return_mat=True,
                                                        )
 
-
-        print(f"MAT: {return_matrix}")
-        print(f"TYPE: {type(return_matrix)}")
-        print(f"SHAPE: {((len(return_matrix), len(return_matrix[0])))}")
         # Assert type is correct
         self.assertTrue(self.assert_is_3d_list_of(return_matrix, qiskit.circuit.Instruction))
 

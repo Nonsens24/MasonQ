@@ -4,9 +4,9 @@ import unittest
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-from brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
-from brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
-    insert_rotations_adjecant_to_cx
+from src.brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
+from src.brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
+    insert_rotations_adjecant_to_cx, linearise_multi_ctrl
 
 
 # Dummy instruction class for testing
@@ -873,5 +873,114 @@ class TestInsertRotations(unittest.TestCase):
 
         self.assertEqual(names(result), expected)
 
-if __name__ == '__main__':
-    pytest.main()
+import unittest
+from math import pi
+
+from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
+from qiskit.circuit import AncillaRegister
+from qiskit.circuit.library import MCXGate, MCU1Gate, PhaseGate, MCXRecursive
+
+from src.brickwork_transpiler.decomposer import linearise_multi_ctrl  # ← replace with your import
+
+
+class TestLineariseMultiCtrl(unittest.TestCase):
+
+    def _count_type(self, qc, gate_type):
+        return sum(1 for inst, _, _ in qc.data if isinstance(inst, gate_type))
+
+    def _names(self, qc):
+        return [inst.name for inst, _, _ in qc.data]
+
+    # ---------- MCX: ancilla handling ----------
+
+    def test_mcx_ge5_controls_uses_phase_anc_and_allocates_if_missing(self):
+        q = QuantumRegister(6, "q")  # 5 ctrls + 1 target
+        qc = QuantumCircuit(q)
+        qc.append(MCXGate(5), q[:5] + [q[5]])  # k = 5
+
+        out = linearise_multi_ctrl(qc)
+
+        # At least one ancilla register of size ≥ 2 must exist
+        anc_sizes = [len(r) for r in out.qregs if r.name.startswith("anc")]
+        self.assertTrue(any(sz >= 2 for sz in anc_sizes))
+
+        # First instruction replaced by MCXRecursive and includes phase ancilla
+        inst, qubits, _ = out.data[0]
+        self.assertIsInstance(inst, MCXRecursive)
+        # k ctrls + phase_anc + target → k + 2 qubits
+        self.assertEqual(len(qubits), 5 + 2)
+
+    def test_mcx_3_controls_no_extra_qubits(self):
+        q = QuantumRegister(4, "q")  # 3 ctrls + 1 target
+        qc = QuantumCircuit(q)
+        qc.append(MCXGate(3), q[:3] + [q[3]])  # k = 3
+
+        out = linearise_multi_ctrl(qc)
+
+        inst, qubits, _ = out.data[0]
+        self.assertIsInstance(inst, MCXRecursive)
+        # No ancilla used for k=3 → k + 1 qubits
+        self.assertEqual(len(qubits), 3 + 1)
+
+    # ---------- MCU1 / MCPhase: linearisation sequence ----------
+
+    def test_mcu1_k4_sequence_compute_phase_uncompute(self):
+        q = QuantumRegister(5, "q")  # 4 ctrls + 1 target
+        qc = QuantumCircuit(q)
+        theta = 0.123
+        qc.append(MCU1Gate(theta, 4), q[:4] + [q[4]])
+
+        out = linearise_multi_ctrl(qc)
+
+        # Expect: MCXRecursive (compute), 1-controlled Phase, MCXRecursive (uncompute)
+        self.assertEqual(self._count_type(out, MCXRecursive), 2)
+        # Middle name is cp/cphase depending on version
+        names = self._names(out)
+        self.assertIn(names[1], ("cp", "cphase"))
+
+        # For k=4 (<5): compute/uncompute use only phase_anc → k + 1 qubits
+        inst1, qubits1, _ = out.data[0]
+        inst3, qubits3, _ = out.data[2]
+        self.assertEqual(len(qubits1), 4 + 1)
+        self.assertEqual(len(qubits3), 4 + 1)
+
+    def test_mcu1_k5_sequence_uses_scratch_and_phase_anc(self):
+        q = QuantumRegister(6, "q")  # 5 ctrls + 1 target
+        qc = QuantumCircuit(q)
+        theta = pi / 7
+        qc.append(MCU1Gate(theta, 5), q[:5] + [q[5]])
+
+        out = linearise_multi_ctrl(qc)
+
+        # Ensure at least two ancillas exist (phase + scratch)
+        anc_sizes = [len(r) for r in out.qregs if r.name.startswith("anc")]
+        self.assertTrue(any(sz >= 2 for sz in anc_sizes))
+
+        # Expect compute → cp → uncompute with scratch+phase ancillas included
+        self.assertEqual(self._count_type(out, MCXRecursive), 2)
+        names = self._names(out)
+        self.assertIn(names[1], ("cp", "cphase"))
+
+        # For k=5 (≥5): compute/uncompute use scratch_anc + phase_anc → k + 2 qubits
+        inst1, qubits1, _ = out.data[0]
+        inst3, qubits3, _ = out.data[2]
+        self.assertEqual(len(qubits1), 5 + 2)
+        self.assertEqual(len(qubits3), 5 + 2)
+
+        # Controlled-phase should act on exactly [phase_anc, target] → 2 qubits total
+        inst2, qubits2, _ = out.data[1]
+        self.assertEqual(len(qubits2), 2)
+
+    # ---------- Pass-through behavior ----------
+
+    def test_other_gates_pass_through(self):
+        q = QuantumRegister(2, "q")
+        c = ClassicalRegister(1, "c")
+        qc = QuantumCircuit(q, c)
+        qc.x(0)
+        qc.measure(0, 0)
+
+        out = linearise_multi_ctrl(qc)
+
+        self.assertEqual([n for n in self._names(out)], ["x", "measure"])
+        self.assertEqual(out.data[0][1], [q[0]])  # X on same qubit

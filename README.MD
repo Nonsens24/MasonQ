@@ -88,49 +88,48 @@ pip install -e ".[dev,docs]"
 ## 🏃 Quick Start
 
 
-```python
-from qiskit import QuantumCircuit
-from qiskit.quantum_info import Statevector
-from brickwork_transpiler import brickwork_transpiler, utils
+```python 
+  # 1) Build a small circuit
+  qc = QuantumCircuit(2)
+  qc.h(0); qc.cx(0, 1)
+  
+  input_vector = Statevector.from_label('++')
+  
+  # OR use a premade circuit
+  # qc, input_vector = circuits.minimal_qrs([0, 0])
 
-# 1) Build a small circuit
-qc = QuantumCircuit(2)
-qc.h(0); qc.cx(0, 1)
+  # 2) Transpile the circuit
+  bw_pattern, col_map, transpiled_qc = brickwork_transpiler.transpile(
+      qc, input_vector,
+      routing_method="sabre",
+      layout_method="trivial",
+      with_ancillas=True
+  )
 
-# 2) Input state |++>
-sv_in = Statevector.from_label('++')
 
-# 3) Transpile to brickwork (use SABRE to stress layout-awareness)
-bw_pattern, col_map, qc_tr = brickwork_transpiler.transpile(
-    qc,
-    sv_in,
-    routing_method="sabre",
-    layout_method="sabre",
-    with_ancillas=True,
-)
+  # 3) Visualise the brickwork graph
+  visualiser.plot_brickwork_graph_from_pattern(bw_pattern,
+                                               show_angles=True,
+                                               node_colours=col_map,
+                                               use_node_colours=True,
+                                               title="Brickwork graph: sel_decomp_test",
+                                               save_plot=True)
 
-# 4) Pad input to the widened register (ancillas on higher indices)
-sv_pad = utils.pad_with_plus_for_transpiled(sv_in, qc, qc_tr)
+  # 4) Simulate the measurement pattern 
+  # Preprocess data to standard form
+  bw_pattern.standardize()
+  bw_pattern.shift_signals()
 
-# 5) Layout-aware reference output from Qiskit
-ref = utils.calculate_ref_state_from_qiskit_circuit_layout_aware(
-    bw_pattern=bw_pattern,
-    qc_original=qc,
-    qc_transpiled=qc_tr,
-    padded_input_vector=sv_pad,
-    return_density_if_mixed=False,  # set True to get DensityMatrix if not pure
-)
+  # Get the output state from Graphix simulation
+  tn = bw_pattern.simulate_pattern(backend="tensornetwork", graph_prep="parallel")
+  psi = tn.to_statevector()
 
-# 6) Simulate the MBQC pattern (Graphix)
-bw_pattern.standardize()
-bw_pattern.shift_signals()
-psi_mbqc = bw_pattern.simulate_pattern(
-    backend="tensornetwork", graph_prep="parallel"
-).to_statevector()
+  # Independently Calculate reference output and extend input vector with new ancillae qubits
+  reference_output = utils.calculate_ref_state_from_qiskit_circuit(bw_pattern, qc, transpiled_qc, input_vector)
 
-# 7) Compare up to global phase
-assert utils.assert_equal_up_to_global_phase(ref, psi_mbqc)
-print("Equivalent up to global phase!")
+  # Compare output states up to global phase
+  if utils.assert_equal_up_to_global_phase(reference_output, psi):
+      print("Equivalent up to global phase!")
 ```
 
 ---
@@ -144,8 +143,8 @@ bw_pattern, col_map, qc_tr = brickwork_transpiler.transpile(
     qc,                 # original circuit (QuantumCircuit)
     input_vector,       # Statevector for 'qc'
     routing_method="sabre",  # "sabre" | "basic" | "lookahead" | ...
-    layout_method="sabre",   # "sabre" | "trivial" | ...
-    with_ancillas=True,      # permit ancilla expansion (wider register)
+    layout_method="trivial",   # "sabre" | "trivial" | ...
+    with_ancillas=True,      # permit ancilla expansion for linear scaling
 )
 ```
 

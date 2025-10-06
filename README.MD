@@ -1,9 +1,4 @@
-## Brickwork graph transpiler
-
-
-
-
-# 🧱 Brickwork Transpiler
+# 🧱 Brickwork Graph Transpiler
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)
 [![codecov](https://codecov.io/gh/Nonsens24/brickwork_transpiler/branch/main/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/brickwork_transpiler)
@@ -150,7 +145,7 @@ from src.brickwork_transpiler import brickwork_transpiler, utils, visualiser, ci
 bw_pattern, col_map, qc_tr = brickwork_transpiler.transpile(
     qc,                 # original circuit (QuantumCircuit)
     input_vector,       # Statevector for 'qc'
-    routing_method="sabre",  # "sabre" | "basic" | "lookahead" | ...
+    routing_method="sabre",  # "sabre" | "basic" | ...
     layout_method="trivial",   # "sabre" | "trivial" | ...
     with_ancillas=True,      # permit ancilla expansion for linear scaling
 )
@@ -241,6 +236,7 @@ This project is licensed under the **Apache License 2.0**. See [LICENSE](./LICEN
 
 ## 💡 Acknowledgements
 
+* Thesis supervisors: Dr. Sebastian Feld and Dr. Tzula Propp
 * The Qiskit team for the layout and transpiler infrastructure.
 * The MBQC/Graphix community for pattern simulation and tooling.
 * The Feld group (Quantum Machine Learning) at TU Delft

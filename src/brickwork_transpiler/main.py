@@ -1,6 +1,4 @@
-import visualiser
-from src.brickwork_transpiler import brickwork_transpiler, utils
-import circuits
+from src.brickwork_transpiler import brickwork_transpiler, utils, visualiser, circuits
 
 def main():
 

@@ -89,6 +89,8 @@ pip install -e ".[dev,docs]"
 
 
 ```python 
+from src.brickwork_transpiler import brickwork_transpiler, utils, visualiser, circuits
+
   # 1) Build a small circuit
   qc = QuantumCircuit(2)
   qc.h(0); qc.cx(0, 1)
@@ -233,7 +235,8 @@ If this package supports your research, please cite:
 
 ## 📜 License
 
-This project is licensed under the **MIT License**. See [LICENSE](./LICENSE).
+This project is licensed under the **Apache License 2.0**. See [LICENSE](./LICENSE) for details.
+
 
 ---
 

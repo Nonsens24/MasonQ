@@ -106,16 +106,6 @@ def get_qubit_entries(bw_pattern):
     return qubit_entries
 
 
-def calculate_qiskit_permutation(list):
-    # reverse the Graphix list to go from big-endian → little-endian
-    list.reverse()
-    # entries_le == [1, 4, 0, 3, 2]
-
-    # invert it: for each Qiskit qubit j, find its position in list
-    perm = [list.index(j) for j in range(len(list))]
-    return perm
-
-
 def get_qiskit_permutation(bw_pattern):
     if bw_pattern is None:
         raise AssertionError("bw_pattern is None")

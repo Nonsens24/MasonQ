@@ -1,11 +1,14 @@
-import unittest
-
 import pytest
 from qiskit import QuantumCircuit
-from brickwork_transpiler.utils import feature_to_generator, pad_with_plus_for_transpiled
+from src.brickwork_transpiler.utils import feature_to_generator, pad_with_plus_for_transpiled
 from qiskit.quantum_info import Statevector
 
-from brickwork_transpiler import utils
+import unittest
+import os
+import csv
+import tempfile
+
+from src.brickwork_transpiler import utils
 import numpy as np
 
 
@@ -246,3 +249,108 @@ class TestInputStateVectorExtender(unittest.TestCase):
         assert sv_out is not sv_in
         # Correct dimension
         assert sv_out.num_qubits == 3
+
+from src.brickwork_transpiler.utils import BufferedCSVWriter
+
+
+class TestBufferedCSVWriter(unittest.TestCase):
+
+    def setUp(self):
+        # Create a temporary file for each test
+        self.temp_file = tempfile.NamedTemporaryFile(delete=False)
+        self.temp_file.close()
+        os.unlink(self.temp_file.name)  # Ensure it doesn't exist initially
+        self.headers = ["a", "b", "c"]
+
+    def tearDown(self):
+        # Clean up temporary file after each test
+        if os.path.exists(self.temp_file.name):
+            os.remove(self.temp_file.name)
+
+    def test_header_written_on_init(self):
+        """Ensure the header is written when the file does not exist."""
+        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
+        with open(self.temp_file.name, newline='') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+        self.assertEqual(header, self.headers)
+
+    def test_flush_writes_row(self):
+        """Ensure flush() writes a buffered row to the CSV file."""
+        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
+        writer.set("a", 1)
+        writer.set("b", 2)
+        writer.flush()
+
+        with open(self.temp_file.name, newline='') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["a"], "1")
+        self.assertEqual(rows[0]["b"], "2")
+        self.assertEqual(rows[0]["c"], "")  # Missing field should be empty string
+
+    def test_row_buffer_cleared_after_flush(self):
+        """Ensure the buffer is cleared after flushing."""
+        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
+        writer.set("a", 42)
+        writer.flush()
+        self.assertEqual(writer.row, {})
+
+
+from src.brickwork_transpiler.utils import (
+    index_to_coordinates,
+    map_indices_to_coordinates,
+    get_qubit_entries,
+    get_qiskit_permutation,
+)
+
+class DummyBWPattern:
+    """Mock object to simulate bw_pattern with output_nodes."""
+    def __init__(self, output_nodes):
+        self.output_nodes = output_nodes
+
+
+class TestHelperFunctions(unittest.TestCase):
+
+    def test_index_to_coordinates_basic(self):
+        """Check correct (row, col) mapping in a simple grid."""
+        self.assertEqual(index_to_coordinates(0, 3), (0, 0))
+        self.assertEqual(index_to_coordinates(2, 3), (0, 2))
+        self.assertEqual(index_to_coordinates(3, 3), (1, 0))
+        self.assertEqual(index_to_coordinates(7, 3), (2, 1))
+
+    def test_index_to_coordinates_edge(self):
+        """Ensure correct behavior for single-column or single-row cases."""
+        self.assertEqual(index_to_coordinates(5, 1), (5, 0))  # single column
+        self.assertEqual(index_to_coordinates(4, 10), (0, 4))  # single row
+
+    def test_map_indices_to_coordinates(self):
+        """Verify mapping for a list of indices."""
+        indices = [0, 1, 2, 3]
+        result = map_indices_to_coordinates(indices, 2)
+        expected = {0: (0, 0), 1: (0, 1), 2: (1, 0), 3: (1, 1)}
+        self.assertEqual(result, expected)
+
+    def test_get_qubit_entries_valid(self):
+        """Ensure correct extraction of qubit indices from bw_pattern."""
+        bw_pattern = DummyBWPattern(output_nodes=[(0,), (2,), (4,)])
+        self.assertEqual(get_qubit_entries(bw_pattern), [0, 2, 4])
+
+    def test_get_qubit_entries_none(self):
+        """Ensure None input raises AssertionError."""
+        with self.assertRaises(AssertionError):
+            get_qubit_entries(None)
+
+    def test_get_qiskit_permutation_valid(self):
+        """Test permutation from bw_pattern matches Qiskit inversion logic."""
+        bw_pattern = DummyBWPattern(output_nodes=[(0,), (1,), (2,)])
+        result = get_qiskit_permutation(bw_pattern)
+        self.assertEqual(result, [2, 1, 0])  # reversed and inverted
+
+    def test_get_qiskit_permutation_none(self):
+        """Ensure None input raises AssertionError."""
+        with self.assertRaises(AssertionError):
+            get_qiskit_permutation(None)
+

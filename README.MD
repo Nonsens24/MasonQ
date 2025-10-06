@@ -8,9 +8,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)
 [![codecov](https://codecov.io/gh/Nonsens24/brickwork_transpiler/branch/main/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/brickwork_transpiler)
 [![PyPI](https://img.shields.io/badge/pypi-not_released-lightgrey.svg)](#)
-
 [![Python](https://img.shields.io/badge/python-%203.11-blue.svg)](https://www.python.org/)
-
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://<org>.github.io/<repo>/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://black.readthedocs.io/)
@@ -89,7 +87,7 @@ pip install -e .
 pip install -e ".[dev,docs]"
 ```
 
-**Requirements:** Python ≥ 3.9, NumPy, Qiskit (Terra). For MBQC simulation and plotting, install Graphix and (optionally) tensornetwork and matplotlib.
+**Requirements:** Python ≥ 3.9, NumPy, Qiskit (Terra). For MBQC simulation and plotting, install Graphix and (optionally) matplotlib.
 
 ---
 

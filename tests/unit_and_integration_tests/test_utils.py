@@ -1,6 +1,6 @@
 import pytest
 from qiskit import QuantumCircuit
-from src.brickwork_transpiler.utils import feature_to_generator, pad_with_plus_for_transpiled
+from brickwork_transpiler.utils import feature_to_generator, pad_with_plus_for_transpiled
 from qiskit.quantum_info import Statevector
 
 import unittest
@@ -8,7 +8,7 @@ import os
 import csv
 import tempfile
 
-from src.brickwork_transpiler import utils
+from brickwork_transpiler import utils
 import numpy as np
 
 
@@ -250,7 +250,7 @@ class TestInputStateVectorExtender(unittest.TestCase):
         # Correct dimension
         assert sv_out.num_qubits == 3
 
-from src.brickwork_transpiler.utils import BufferedCSVWriter
+from brickwork_transpiler.utils import BufferedCSVWriter
 
 
 class TestBufferedCSVWriter(unittest.TestCase):
@@ -299,7 +299,7 @@ class TestBufferedCSVWriter(unittest.TestCase):
         self.assertEqual(writer.row, {})
 
 
-from src.brickwork_transpiler.utils import (
+from brickwork_transpiler.utils import (
     index_to_coordinates,
     map_indices_to_coordinates,
     get_qubit_entries,

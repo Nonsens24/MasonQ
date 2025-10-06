@@ -1,11 +1,14 @@
 import numpy as np
 import pytest
 import unittest
-from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
+from math import pi
 
-from src.brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
-from src.brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
+from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
+from qiskit.circuit.library import MCXGate, MCU1Gate, PhaseGate, MCXRecursive
+
+from brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
+from brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
     insert_rotations_adjecant_to_cx, linearise_multi_ctrl
 
 
@@ -873,14 +876,6 @@ class TestInsertRotations(unittest.TestCase):
 
         self.assertEqual(names(result), expected)
 
-import unittest
-from math import pi
-
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.circuit import AncillaRegister
-from qiskit.circuit.library import MCXGate, MCU1Gate, PhaseGate, MCXRecursive
-
-from src.brickwork_transpiler.decomposer import linearise_multi_ctrl  # ← replace with your import
 
 
 class TestLineariseMultiCtrl(unittest.TestCase):

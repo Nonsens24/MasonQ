@@ -1,8 +1,6 @@
 import unittest
-
 import qiskit
-
-from src.brickwork_transpiler import circuits, brickwork_transpiler, visualiser
+from brickwork_transpiler import circuits, brickwork_transpiler, visualiser
 
 
 class TestSingleGates(unittest.TestCase):

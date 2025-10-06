@@ -1,10 +1,6 @@
 ## Brickwork graph transpiler
 
-Takes a unitary circuit and transpiles it into a brickwork graph state. The program builds the brickwork
-graph by combining bicks (i.e., arbitrary single qubit rotations and CX gates). Graphix (https://github.com/TeamGraphix/graphix)
-graph generator is mainly used to calculate the Z/X correction dependencies.
 
-The generated brickwork graph will be used for simulating UBQC (https://arxiv.org/abs/0807.4154).
 
 
 # 🧱 Brickwork Transpiler
@@ -21,7 +17,11 @@ The generated brickwork graph will be used for simulating UBQC (https://arxiv.or
 [![mypy](https://img.shields.io/badge/mypy-checked-informational)](http://mypy-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://docs.pytest.org/)
 
-A layout-aware transpiler that converts **Qiskit circuits** into **brickwork (MBQC)** patterns and back, with provable statevector equivalence even under **SABRE** layouts, routing swaps, and ancilla management. Includes utilities for layout extraction, ancilla padding, reference-state generation, and robust comparisons up to global phase.
+A brickwork graph (https://arxiv.org/abs/0807.4154) transpiler that converts unitary **Qiskit circuits** into Graphix
+**brickwork (MBQC)** patterns (https://github.com/TeamGraphix/graphix), with provable statevector
+equivalence, circuit optimisations, routing swaps, and ancilla management. Includes utilities for layout extraction, ancilla padding, 
+reference-state generation, and robust comparisons up to global phase.
+
 
 ---
 
@@ -47,22 +47,30 @@ A layout-aware transpiler that converts **Qiskit circuits** into **brickwork (MB
 
 ## 🚀 Features
 
-- **Qiskit → Brickwork** translation that emits an MBQC pattern plus an optional color map for visualization.
-- **Layout awareness:** uses `final_index_layout()` when available, or reconstructs from `initial_layout` and `routing_permutation()` (e.g., SABRE).
+- **Qiskit → Brickwork** translation that outputs an MBQC pattern plus an optional color map for visualization.
 - **Ancilla handling:** automatic padding with `|+⟩` on higher indices to match widened registers after transpilation.
-- **Reference evaluation:** computes layout-aware reference states and matches MBQC simulator output after reordering and partial trace.
-- **Permutation utilities:** safe construction of `PermutationGate` patterns using the `perm[src]=dest` convention.
-- **Robust tests:** helpers for global-phase equivalence, mixed-state detection, and layout synchronization.
+- **Reference evaluation:** computes layout-aware reference states using Qiskit and matches MBQC simulator output after reordering.
+- **Robust tests:** .
 
 ---
-## 📄 Papers
+## 📄 Relevant Papers
 
+- Universal Blind Quantum Computation (https://doi.org/10.48550/arXiv.0807.4154)
+- Quantum Algorithm for Linear Systems of Equations (https://doi.org/10.1103/PhysRevLett.103.150502)
+- Recommendation Systems With the Quantum K–NN and Grover Algorithms for Data Processing (https://doi.org/10.2478/amcs-2019-0011)
+- The Measurement Calculus (https://doi.org/10.48550/arXiv.0704.1263)
+- Optimizing Gate Decomposition for High-Level Quantum Programming (https://doi.org/10.22331/q-2025-03-12-1659)
+- Verification implemented (https://doi.org/10.48550/arXiv.1203.5217)
+
+
+### Other sources
+- ▶️ An introduction to measurement-based quantum computation by Robert Raussendorf: https://www.youtube.com/watch?v=zBjAoOW3xHk
 ---
 
 
 ## ⚙️ Installation
 
-### From PyPI
+### From PyPI - Unavailable
 ```bash
 pip install brickwork-transpiler
 ````
@@ -70,8 +78,8 @@ pip install brickwork-transpiler
 ### From source
 
 ```bash
-git clone https://github.com/<org>/<repo>.git
-cd <repo>
+git https://github.com/Nonsens24/brickwork_transpiler.git
+cd brickwork_transpiler
 pip install -e .
 ```
 
@@ -152,16 +160,12 @@ bw_pattern, col_map, qc_tr = brickwork_transpiler.transpile(
 
 ### Padding inputs when the register widens
 
-If the transpiled circuit has `k` more qubits than the original, pad the input with `|+⟩^{⊗k}` on **higher indices**:
+If the transpiled circuit has `k` more qubits than the original, pad the input with `|+⟩^{⊗k}` on **higher indices** (incorporated in reference state calculation) :
 
 ```python
 sv_pad = utils.pad_with_plus_for_transpiled(input_vector, qc, qc_tr)
 # returns (|+>^{⊗k}) ⊗ |ψ_in>
 ```
-
-### Extract and undo layout
-
-Extract a **full physical→logical** map (length = `qc_tr.num_qubits`; ancillas as `None`), then undo the layout on any state prepared in physical wire order:
 
 
 ### Reference state (layout-aware)
@@ -169,13 +173,10 @@ Extract a **full physical→logical** map (length = `qc_tr.num_qubits`; ancillas
 Produce a reference state on the **logical output subsystem** in the **Graphix output order** (tracing out ancillas and non-output logicals when necessary):
 
 ```python
-ref = utils.calculate_ref_state_from_qiskit_circuit_layout_aware(
-    bw_pattern=bw_pattern,
-    qc_original=qc,
-    qc_transpiled=qc_tr,
-    padded_input_vector=sv_pad,
-    return_density_if_mixed=False,  # True → return DensityMatrix if the subsystem is mixed
-)
+  reference_output = utils.calculate_ref_state_from_qiskit_circuit(bw_pattern, 
+                                                                   qc, 
+                                                                   transpiled_qc, 
+                                                                   input_vector)
 ```
 
 ---
@@ -202,17 +203,17 @@ pytest -q
 
 ## 📝 Design Notes
 
-* **Permutation convention.** We adopt Qiskit’s `PermutationGate` convention `perm[src] = dest`. Human “order lists” (what appears at positions 0..N−1) are the **inverse** permutation.
 * **Ancilla policy.** New wires introduced by transpilation are treated as ancillas and placed **after** the logical block. Padding uses `( |+>^{⊗k} ) ⊗ |ψ⟩`.
-* **Layout composition.** Prefer `final_index_layout()` when available; otherwise reconstruct with `initial_layout` ∘ `routing_permutation()` to capture both SABRE’s initial placement and swap routing.
 
 ---
 
 ## 🗺️ Roadmap
 
-* [ ] Clifford-only fast path for reference evaluation
+* [ ] Fix Sabre layout permutation on simulated state vector to compare with reference state vector
+* [ ] Qiskit HLS exact linearisation of MCU gates (https://quantum-journal.org/papers/q-2025-03-12-1659/)
+* [ ] Verification implemented (https://arxiv.org/abs/1203.5217)
+* [ ] Merge steps converting dependency graph to aligned matrix
 * [ ] Noise-aware fidelity comparison (Kraus channels)
-* [ ] Export of brickwork patterns to standard MBQC formats
 * [ ] Benchmarks across hardware-native layouts and couplings
 
 ---
@@ -244,4 +245,4 @@ This project is licensed under the **Apache License 2.0**. See [LICENSE](./LICEN
 
 * The Qiskit team for the layout and transpiler infrastructure.
 * The MBQC/Graphix community for pattern simulation and tooling.
-* All contributors who helped refine layout-aware reference evaluation and testing.
+* The Feld group (Quantum Machine Learning) at TU Delft

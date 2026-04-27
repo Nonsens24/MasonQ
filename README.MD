@@ -10,7 +10,7 @@
 [![mypy](https://img.shields.io/badge/mypy-checked-informational)](http://mypy-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://docs.pytest.org/)
 
-A brickwork graph (https://arxiv.org/abs/0807.4154) transpiler that converts unitary **Qiskit circuits** into Graphix
+MasonQ is a brickwork graph (https://arxiv.org/abs/0807.4154) transpiler that converts unitary **Qiskit circuits** into Graphix
 **brickwork (MBQC)** patterns (https://github.com/TeamGraphix/graphix), with provable statevector
 equivalence, circuit optimisations, routing swaps, and ancilla management. Includes utilities for layout extraction, ancilla padding, 
 reference-state generation, and robust comparisons up to global phase.

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/masonQ_final_logo.png" alt="MasonQ logo" width="180">
+</p>
+
 # 🧱 MasonQ
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)

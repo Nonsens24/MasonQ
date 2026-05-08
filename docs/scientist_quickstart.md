@@ -50,6 +50,8 @@ Common result methods:
 result.plot(save_path="images/graphs/my_circuit.pdf", show=False)
 statevector = result.simulate_statevector()
 verification = result.verify()
+reference = result.qiskit_reference_statevector()
+permutation = result.output_permutation()
 result.save_pattern_text("outputs/my_pattern.txt")
 ```
 
@@ -83,6 +85,20 @@ print(verification.fidelity)
 
 For larger circuits, prefer structural validation and resource metrics over
 full statevector simulation. Full simulation scales exponentially.
+
+To inspect the comparison manually:
+
+```python
+brickwork_state = result.simulate_statevector()
+qiskit_reference = result.qiskit_reference_statevector()
+permutation = result.output_permutation()
+
+print(permutation)
+```
+
+Both `brickwork_state` and `qiskit_reference` are in Graphix output order. The
+permutation tells you how the decomposed Qiskit output was reordered to match
+Graphix.
 
 If Qiskit optimisation level 3 hits numerical synthesis failures, MasonQ falls
 back to optimisation level 1 by default. For large benchmark circuits you can
@@ -131,3 +147,26 @@ The structured result exposes the core resource estimate:
 ```python
 result.resources
 ```
+
+## Layout Methods
+
+Use `layout_method="trivial"` when you want the easiest debugging story:
+logical qubits stay in the natural row order as much as Qiskit allows.
+
+Use `layout_method="sabre"` with `routing_method="sabre"` when studying more
+realistic line-layout routing:
+
+```python
+result = transpile(
+    qc,
+    input_vector,
+    layout_method="sabre",
+    routing_method="sabre",
+    return_result=True,
+)
+```
+
+`result.verify()` is layout-aware. It simulates the Graphix brickwork pattern,
+computes the Qiskit reference from `result.decomposed_circuit`, and permutes
+that reference into Graphix output order. For manual checks, use
+`result.output_permutation()` and `result.qiskit_reference_statevector()`.

@@ -113,18 +113,36 @@ def get_qubit_entries(bw_pattern):
 
 
 def get_qiskit_permutation(bw_pattern):
+    """Return the Qiskit-circuit-to-Graphix-output qubit permutation.
+
+    Graphix reports output nodes in its own output-node ordering. Qiskit
+    statevectors use little-endian qubit indexing. Reversing the Graphix output
+    rows gives the little-endian order, and this permutation maps Qiskit's
+    decomposed-circuit qubit positions into that Graphix statevector order.
+
+    This permutation is independent of the Qiskit layout method because it is
+    applied after the decomposed/routed Qiskit circuit has already incorporated
+    Qiskit's layout and routing choices.
+    """
     if bw_pattern is None:
         raise AssertionError("bw_pattern is None")
 
     qubit_entries = [t[0] for t in bw_pattern.output_nodes]
 
-    # reverse the Graphix list to go from big-endian → little-endian
+    # Reverse the Graphix list to go from big-endian to little-endian.
     qubit_entries.reverse()
-    # entries_le == [1, 4, 0, 3, 2]
+    if sorted(qubit_entries) != list(range(len(qubit_entries))):
+        raise ValueError(f"Pattern output rows are not a full qubit permutation: {qubit_entries}")
 
-    # invert it: for each Qiskit qubit j, find its position in list
+    # For each Qiskit/decomposed-circuit qubit j, find its position in the
+    # Graphix little-endian output list.
     perm = [qubit_entries.index(j) for j in range(len(qubit_entries))]
     return perm
+
+
+def permute_circuit_to_graphix_output_order(circuit: QuantumCircuit, bw_pattern) -> QuantumCircuit:
+    """Return `circuit` with qubits permuted to Graphix output order."""
+    return permute_qubits(circuit, perm=get_qiskit_permutation(bw_pattern))
 
 
 # def _final_p2v(qc_virtual, qc_transpiled):
@@ -278,16 +296,7 @@ def calculate_ref_state_from_qiskit_circuit(bw_pattern, qc, transpiled_qc,
 
     logger.debug("Extended input vector dimension: %s", extended_input_vector.dim)
 
-    qubit_entries = [t[0] for t in bw_pattern.output_nodes]
-
-    # reverse the Graphix list to go from big-endian → little-endian
-    qubit_entries.reverse()
-    # entries_le == [1, 4, 0, 3, 2]
-
-    # invert it: for each Qiskit qubit j, find its position in list
-    perm = [qubit_entries.index(j) for j in range(len(qubit_entries))]
-
-    qc_perm = permute_qubits(transpiled_qc, perm=perm)
+    qc_perm = permute_circuit_to_graphix_output_order(transpiled_qc, bw_pattern)
     return extended_input_vector.evolve(qc_perm)
 
 

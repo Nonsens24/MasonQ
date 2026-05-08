@@ -154,7 +154,8 @@ CX gadgets are injected once from their top-row endpoint.
 
 Defines `TranspileResult` and `VerificationResult`. This is the scientist-facing
 result API: resources, plotting, simulation, verification, pattern copying, and
-text export live here.
+text export live here. It also exposes `output_permutation()` and
+`qiskit_reference_statevector()` for manual Graphix/Qiskit statevector checks.
 
 ### `src/brickwork_transpiler/resources.py`
 
@@ -181,7 +182,8 @@ Small timing utilities for recording elapsed time around expensive stages.
 
 Shared numerical and layout utilities. Important responsibilities include
 statevector comparison, qubit permutation, reference-state calculation, input
-state padding for ancillas, and layout mapping helpers.
+state padding for ancillas, Graphix output-order permutation, and layout mapping
+helpers.
 
 ### `src/brickwork_transpiler/visualiser.py`
 

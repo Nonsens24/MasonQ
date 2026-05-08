@@ -132,13 +132,43 @@ class TranspileResult:
         return pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
 
     def simulate_statevector(self, **kwargs: Any) -> np.ndarray:
-        """Simulate and return a flat NumPy statevector."""
+        """Simulate the Graphix pattern and return its flat output statevector."""
         state = self.simulate(**kwargs)
         if hasattr(state, "to_statevector"):
             return np.asarray(state.to_statevector(), dtype=complex)
         if hasattr(state, "flatten"):
             return np.asarray(state.flatten(), dtype=complex)
         return np.asarray(state, dtype=complex).reshape(-1)
+
+    def output_permutation(self) -> list[int]:
+        """Return the Qiskit-to-Graphix output qubit permutation.
+
+        Apply this to the decomposed Qiskit circuit before statevector
+        simulation when manually comparing against `simulate_statevector()`.
+        """
+        return utils.get_qiskit_permutation(self.pattern)
+
+    def qiskit_reference_statevector(
+        self,
+        input_state: Any | None = None,
+        source_circuit: QuantumCircuit | None = None,
+    ) -> np.ndarray:
+        """Return the layout-aware Qiskit reference in Graphix output order."""
+        circuit = source_circuit or self.source_circuit
+        state = input_state if input_state is not None else self.input_state
+        if circuit is None:
+            raise ValueError("qiskit_reference_statevector() needs a source circuit.")
+        if state is None:
+            raise ValueError("qiskit_reference_statevector() needs an input state.")
+        return np.asarray(
+            utils.calculate_ref_state_from_qiskit_circuit(
+                self.pattern,
+                circuit,
+                self.decomposed_circuit,
+                state,
+            ),
+            dtype=complex,
+        )
 
     def verify(
         self,
@@ -178,15 +208,7 @@ class TranspileResult:
         else:
             simulated = np.asarray(simulated_obj, dtype=complex).reshape(-1)
 
-        reference = np.asarray(
-            utils.calculate_ref_state_from_qiskit_circuit(
-                pattern,
-                circuit,
-                self.decomposed_circuit,
-                state,
-            ),
-            dtype=complex,
-        )
+        reference = self.qiskit_reference_statevector(input_state=state, source_circuit=circuit)
         reference_norm = np.linalg.norm(reference)
         simulated_norm = np.linalg.norm(simulated)
         if np.isclose(reference_norm, 0.0, atol=tolerance) or np.isclose(

@@ -1,4 +1,6 @@
-# MasonQ
+
+[//]: # (![Logo]&#40;images/masonQ_nobg.png&#41;)
+![Logo](images/masonQ_dark.png)
 
 MasonQ is a layout-aware transpiler from unitary Qiskit circuits to brickwork
 measurement-based quantum computation patterns. It lowers circuits to a
@@ -112,6 +114,57 @@ reference_state = utils.calculate_ref_state_from_qiskit_circuit(
 
 Use `verify()` for normal correctness checks. It runs both sides consistently
 and handles the output-order comparison used by the package.
+
+If you want to inspect or reproduce the comparison yourself:
+
+```python
+brickwork_state = result.simulate_statevector()
+qiskit_reference = result.qiskit_reference_statevector()
+permutation = result.output_permutation()
+
+print(permutation)
+```
+
+`output_permutation()` is the qubit permutation that maps the decomposed Qiskit
+circuit output order into Graphix's output statevector order. This is the
+important piece when `layout_method` is not trivial.
+
+## Layout Methods And Verification
+
+MasonQ supports Qiskit layout/routing choices through the normal Qiskit
+arguments:
+
+```python
+result = transpile(
+    qc,
+    input_state,
+    routing_method="sabre",
+    layout_method="sabre",
+    return_result=True,
+)
+```
+
+The recommended choices are:
+
+- `layout_method="trivial"` for debugging and deterministic logical-to-row
+  interpretation;
+- `layout_method="sabre"` for realistic line-layout routing experiments;
+- `routing_method="sabre"` for nontrivial circuits on the line coupling map.
+
+For verification, MasonQ compares the Graphix simulation with the decomposed
+Qiskit circuit after Qiskit's layout and routing have already been applied.
+It then permutes the Qiskit reference into Graphix output order. This means
+`result.verify()` can be used with nontrivial layout methods for supported
+circuits:
+
+```python
+verification = result.verify(tolerance=1e-8)
+assert verification.equivalent
+```
+
+For manual checks, compare `result.simulate_statevector()` with
+`result.qiskit_reference_statevector()`. Both are returned in Graphix output
+order.
 
 ## Public Pipeline
 

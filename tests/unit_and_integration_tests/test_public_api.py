@@ -33,6 +33,32 @@ def test_tuple_unpacking_remains_compatible():
     assert decomposed_qc.num_qubits >= qc.num_qubits
 
 
+@pytest.mark.integration
+def test_verify_supports_nontrivial_layout_method():
+    qc = QuantumCircuit(3)
+    qc.h(0)
+    qc.x(1)
+    qc.cx(0, 2)
+    qc.z(2)
+
+    result = transpile(
+        qc,
+        Statevector.from_label("+++"),
+        routing_method="sabre",
+        layout_method="sabre",
+        return_result=True,
+    )
+
+    permutation = result.output_permutation()
+    reference = result.qiskit_reference_statevector()
+    verification = result.verify()
+
+    assert sorted(permutation) == list(range(result.decomposed_circuit.num_qubits))
+    assert reference.shape == (2 ** result.decomposed_circuit.num_qubits,)
+    assert verification.equivalent
+    assert verification.fidelity == pytest.approx(1.0)
+
+
 def test_show_versions_returns_mapping(capsys):
     versions = show_versions()
 

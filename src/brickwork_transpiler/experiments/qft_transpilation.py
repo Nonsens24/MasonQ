@@ -3,11 +3,10 @@ import os
 import csv
 
 from qiskit.circuit.library import QFT
-from qiskit.pulse import num_qubits
 
-from src.brickwork_transpiler import brickwork_transpiler, circuits
+from brickwork_transpiler import brickwork_transpiler, circuits
 
-import src.brickwork_transpiler.utils
+import brickwork_transpiler.utils as bw_utils
 
 
 def get_writer(file_name: str, file_path: str = "src/ubqc_brickwork_transpiler/experiments/data/output_data/"):
@@ -26,7 +25,7 @@ def get_writer(file_name: str, file_path: str = "src/ubqc_brickwork_transpiler/e
             writer.writerow(header)
 
     # Now return your custom writer
-    return src.brickwork_transpiler.utils.BufferedCSVWriter(full_path, header)
+    return bw_utils.BufferedCSVWriter(full_path, header)
 
 
 def experiment_qft_transpilation():

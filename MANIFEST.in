@@ -1,0 +1,10 @@
+include README.MD
+include LICENSE
+include CITATION.cff
+include environment.yml
+recursive-include docs *.md
+recursive-include examples *.py
+recursive-exclude images *
+recursive-exclude outputs *
+recursive-exclude old_tests *
+recursive-exclude src/brickwork_transpiler/experiments/data/output_data *

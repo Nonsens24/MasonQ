@@ -15,20 +15,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"   # was 3.11
-
-      - name: Install project (dev + mbqc)
+      - name: Install project
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,mbqc]"
+          pip install -e ".[dev,viz,qrs]"
 
 
 
-      - name: Run tests with coverage
+      - name: Run fast tests with coverage
         run: |
-          pytest           # The pyproject already enables --cov and creates coverage.xml
+          pytest tests/unit_and_integration_tests -m "not slow and not system"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -36,4 +32,3 @@ jobs:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
-

@@ -1,0 +1,227 @@
+"""Structured return objects for the public API."""
+
+from __future__ import annotations
+
+import copy
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterator
+
+import numpy as np
+from qiskit import QuantumCircuit
+
+from .resources import ResourceEstimate, estimate_resources
+from . import utils
+
+
+@dataclass(frozen=True)
+class VerificationResult:
+    """Numerical comparison between Qiskit and brickwork simulation outputs."""
+
+    equivalent: bool
+    fidelity: float
+    inner_product: complex
+    tolerance: float
+    reference_state: np.ndarray
+    simulated_state: np.ndarray
+
+    def raise_for_failure(self) -> None:
+        if not self.equivalent:
+            raise AssertionError(
+                "States are not equal up to global phase.\n"
+                f"Inner product: {self.inner_product}\n"
+                f"Absolute value: {self.fidelity:.6f} "
+                f"(tolerance {self.tolerance})"
+            )
+
+
+@dataclass(frozen=True)
+class TranspileResult:
+    """Result of converting a Qiskit circuit into a brickwork pattern.
+
+    The object is iterable for compatibility with the historical tuple return:
+    `pattern, colour_map, circuit = result`.
+    """
+
+    pattern: Any
+    colour_map: dict
+    decomposed_circuit: QuantumCircuit
+    instruction_matrix: list | None = None
+    source_circuit: QuantumCircuit | None = None
+    input_state: Any | None = None
+
+    @property
+    def resources(self) -> ResourceEstimate | None:
+        if self.instruction_matrix is None:
+            return None
+        return estimate_resources(self.decomposed_circuit, self.instruction_matrix)
+
+    @property
+    def transpiled_circuit(self) -> QuantumCircuit:
+        """Compatibility alias for `decomposed_circuit`.
+
+        The returned Qiskit circuit has been decomposed/routed into the brick
+        basis used by the package; it is not the final MBQC pattern.
+        """
+        return self.decomposed_circuit
+
+    @property
+    def color_map(self) -> dict:
+        """US spelling alias for `colour_map`."""
+        return self.colour_map
+
+    def copy_pattern(self):
+        """Return a deep copy of the mutable Graphix pattern."""
+        return copy.deepcopy(self.pattern)
+
+    def plot(
+        self,
+        *,
+        save_path: str | Path | None = None,
+        show: bool = False,
+        title: str = "Brickwork graph",
+        show_angles: bool = True,
+        use_node_colours: bool = True,
+        close: bool = True,
+        **kwargs: Any,
+    ):
+        """Plot the brickwork graph using safe defaults for notebooks and IDEs."""
+        from . import visualiser
+
+        return visualiser.plot_brickwork_graph_from_pattern(
+            self.pattern,
+            show_angles=show_angles,
+            node_colours=self.colour_map,
+            use_node_colours=use_node_colours,
+            title=title,
+            save_plot=save_path is None,
+            save_path=str(save_path) if save_path is not None else None,
+            show=show,
+            close=close,
+            **kwargs,
+        )
+
+    def simulate(
+        self,
+        *,
+        backend: str = "tensornetwork",
+        graph_prep: str = "parallel",
+        standardize: bool = True,
+        shift_signals: bool = True,
+        rng: np.random.Generator | None = None,
+        seed: int | None = 0,
+        mutate: bool = False,
+        **kwargs: Any,
+    ):
+        """Simulate the Graphix pattern and return the backend state object.
+
+        By default this works on a copy of the pattern, so repeated calls are
+        safe in notebooks. Pass `mutate=True` to run on the stored pattern.
+        """
+        pattern = self.pattern if mutate else self.copy_pattern()
+        if standardize:
+            pattern.standardize()
+        if shift_signals:
+            pattern.shift_signals()
+        if rng is None and seed is not None:
+            rng = np.random.default_rng(seed)
+
+        simulate_kwargs = dict(kwargs)
+        if backend in {"tensornetwork", "mps"}:
+            simulate_kwargs.setdefault("graph_prep", graph_prep)
+        return pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
+
+    def simulate_statevector(self, **kwargs: Any) -> np.ndarray:
+        """Simulate and return a flat NumPy statevector."""
+        state = self.simulate(**kwargs)
+        if hasattr(state, "to_statevector"):
+            return np.asarray(state.to_statevector(), dtype=complex)
+        if hasattr(state, "flatten"):
+            return np.asarray(state.flatten(), dtype=complex)
+        return np.asarray(state, dtype=complex).reshape(-1)
+
+    def verify(
+        self,
+        input_state: Any | None = None,
+        source_circuit: QuantumCircuit | None = None,
+        *,
+        tolerance: float = 1e-6,
+        raise_on_failure: bool = False,
+        **simulate_kwargs: Any,
+    ) -> VerificationResult:
+        """Compare Graphix simulation against Qiskit's statevector result."""
+        circuit = source_circuit or self.source_circuit
+        state = input_state if input_state is not None else self.input_state
+        if circuit is None:
+            raise ValueError("verify() needs a source circuit.")
+        if state is None:
+            raise ValueError("verify() needs an input state.")
+
+        pattern = self.pattern if simulate_kwargs.pop("mutate", False) else self.copy_pattern()
+        if simulate_kwargs.pop("standardize", True):
+            pattern.standardize()
+        if simulate_kwargs.pop("shift_signals", True):
+            pattern.shift_signals()
+
+        seed = simulate_kwargs.pop("seed", 0)
+        rng = simulate_kwargs.pop("rng", None)
+        if rng is None and seed is not None:
+            rng = np.random.default_rng(seed)
+        backend = simulate_kwargs.pop("backend", "tensornetwork")
+        if backend in {"tensornetwork", "mps"}:
+            simulate_kwargs.setdefault("graph_prep", "parallel")
+        simulated_obj = pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
+        if hasattr(simulated_obj, "to_statevector"):
+            simulated = np.asarray(simulated_obj.to_statevector(), dtype=complex)
+        elif hasattr(simulated_obj, "flatten"):
+            simulated = np.asarray(simulated_obj.flatten(), dtype=complex)
+        else:
+            simulated = np.asarray(simulated_obj, dtype=complex).reshape(-1)
+
+        reference = np.asarray(
+            utils.calculate_ref_state_from_qiskit_circuit(
+                pattern,
+                circuit,
+                self.decomposed_circuit,
+                state,
+            ),
+            dtype=complex,
+        )
+        reference_norm = np.linalg.norm(reference)
+        simulated_norm = np.linalg.norm(simulated)
+        if np.isclose(reference_norm, 0.0, atol=tolerance) or np.isclose(
+            simulated_norm, 0.0, atol=tolerance
+        ):
+            raise AssertionError("One of the states has zero norm.")
+
+        reference_unit = reference / reference_norm
+        simulated_unit = simulated / simulated_norm
+        inner_product = np.vdot(reference_unit, simulated_unit)
+        fidelity = float(np.abs(inner_product))
+        result = VerificationResult(
+            equivalent=bool(np.isclose(fidelity, 1.0, atol=tolerance, rtol=0.0)),
+            fidelity=fidelity,
+            inner_product=inner_product,
+            tolerance=tolerance,
+            reference_state=reference,
+            simulated_state=simulated,
+        )
+        if raise_on_failure:
+            result.raise_for_failure()
+        return result
+
+    def save_pattern_text(self, path: str | Path, *, limit: int = 2**32) -> Path:
+        """Write Graphix's text representation of the pattern to disk."""
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if hasattr(self.pattern, "print_pattern"):
+            text = self.pattern.print_pattern(lim=limit)
+        else:
+            text = repr(self.pattern)
+        output.write_text(str(text), encoding="utf-8")
+        return output
+
+    def __iter__(self) -> Iterator[Any]:
+        yield self.pattern
+        yield self.colour_map
+        yield self.decomposed_circuit

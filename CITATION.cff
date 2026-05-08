@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use MasonQ in academic work, please cite this software."
+title: "MasonQ: A Brickwork Transpiler for Measurement-Based Quantum Computation"
+version: 0.1.0
+date-released: 2026-05-08
+authors:
+  - family-names: Fleur
+    given-names: Rex
+repository-code: "https://github.com/Nonsens24/brickwork_transpiler"
+type: software
+license: proprietary
+keywords:
+  - quantum-computing
+  - measurement-based-quantum-computation
+  - qiskit
+  - graphix
+  - brickwork-state
+

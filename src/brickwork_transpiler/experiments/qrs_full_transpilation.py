@@ -1,9 +1,9 @@
 import numpy as np
 
-from src.brickwork_transpiler import brickwork_transpiler
-from src.brickwork_transpiler.algorithms import qrs_knn_grover
+from brickwork_transpiler import brickwork_transpiler
+from brickwork_transpiler.algorithms import qrs_knn_grover
 
-import src.brickwork_transpiler.utils
+import brickwork_transpiler.utils as bw_utils
 
 
 
@@ -295,7 +295,7 @@ def get_writer(file_name: str, file_path: str="src/ubqc_brickwork_transpiler/exp
     header = ["num_iterations", "decomposed_depth", "transpiled_depth", "original_depth", "num_gates_original",
               "num_gates_transpiled", "L", "g"]
 
-    return src.brickwork_transpiler.utils.BufferedCSVWriter(file_path + file_name, header)
+    return bw_utils.BufferedCSVWriter(file_path + file_name, header)
 
 
 def experiment_qrs_full_one_matching_element():
@@ -456,6 +456,3 @@ def experiment_qrs_full_one_match_duplicates():
         writer.set("transpiled_depth", len(instr_mat[0]))
         writer.set("original_depth", qrs_circ.depth())
         writer.flush()
-
-
-

@@ -17,11 +17,20 @@ ENV/
 .ipynb_checkpoints/
 
 # Test coverage and logs
+.coverage
 coverage.*
 .cache/
+htmlcov/
+coverage.xml
 nosetests.xml
 *.log
 *.out
+
+# Local dependency audit exports
+/dependency-tree.txt
+/installed-freeze.txt
+/licenses.txt
+/requirements.txt
 
 # Build artifacts
 build/
@@ -59,3 +68,8 @@ Desktop.ini
 #other code:
 libs/
 test_gequiv.py
+
+# Generated examples and local research outputs
+outputs/
+images/graphs/example_*
+images/generated/

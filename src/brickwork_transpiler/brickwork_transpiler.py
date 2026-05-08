@@ -1,38 +1,102 @@
+import logging
+
 from qiskit import QuantumCircuit
-from . import decomposer, graph_builder, pattern_converter, utils, visualiser
+from . import decomposer, graph_builder, pattern_converter
+from .result import TranspileResult
+from .validation import (
+    validate_brickwork_graph_data,
+    validate_instruction_matrix,
+    validate_pattern_outputs,
+)
+
+logger = logging.getLogger(__name__)
 
 
+def transpile(
+    qc: QuantumCircuit,
+    input_vector=None,
+    routing_method=None,
+    layout_method=None,
+    return_mat: bool = False,
+    file_writer=None,
+    with_ancillas=True,
+    plot_decomposed: bool = False,
+    opt=3,
+    verbose: bool = False,
+    multi_control_strategy: str = "hls",
+    fallback_opt: int | None = 1,
+    validate: bool = True,
+    return_result: bool = False,
+):
+    """Transpile a Qiskit circuit into a Graphix brickwork pattern.
 
-def transpile(qc: QuantumCircuit, input_vector=None, routing_method=None, layout_method=None, return_mat: bool = False,
-              file_writer=None, with_ancillas=True, plot_decomposed: bool = False, opt = 3):
+    The default return value is the historical tuple
+    `(pattern, colour_map, decomposed_circuit)`. Set `return_result=True` for a
+    named `TranspileResult`.
+    """
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
 
     # Decompose to CX, rzrxrz, id   -   Need opt = 3 for SU(2) rotation merging
-    print("Decomposing circuit...")
-    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=opt, routing_method=routing_method,
-                                                              layout_method=layout_method, file_writer=file_writer,
-                                                             with_ancillas=with_ancillas, draw=plot_decomposed)
+    logger.info("Decomposing circuit...")
+    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(
+        qc,
+        opt=opt,
+        routing_method=routing_method,
+        layout_method=layout_method,
+        file_writer=file_writer,
+        with_ancillas=with_ancillas,
+        draw=plot_decomposed,
+        verbose=verbose,
+        multi_control_strategy=multi_control_strategy,
+        fallback_opt=fallback_opt,
+    )
 
-    print("Creating instruction matrix from DAG...")
+    logger.info("Creating instruction matrix from DAG...")
     # Optimise Instruction matrix with dependency graph
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed_qc)
 
-    print("Aligning instruction matrix...")
+    logger.info("Aligning instruction matrix...")
     # Align gates according to brickwork topology
     qc_mat_aligned = decomposer.align_bricks(cx_mat, qc_mat)
+    if validate:
+        validate_instruction_matrix(qc_mat_aligned)
 
     # Depth analysis only requires the number of columns of the aligned matrix, saving resources
     if return_mat:
         return qc_mat_aligned
 
-    print("Building graph structure...")
+    logger.info("Building graph structure...")
     # Build the graph from the optimised and formatted instruction matrix
     bw_graph_data = graph_builder.generate_brickwork_graph_from_instruction_matrix(qc_mat_aligned)
+    if validate:
+        validate_brickwork_graph_data(
+            bw_graph_data,
+            rows=len(qc_mat_aligned),
+            brick_cols=len(qc_mat_aligned[0]) if qc_mat_aligned else 0,
+        )
 
     # Get the networkx graph structure
     bw_nx_graph = graph_builder.to_networkx_graph(bw_graph_data)
 
     # Add angles and convert to Graphix pattern
-    print("Calculating measurement dependencies...")
+    logger.info("Calculating measurement dependencies...")
     bw_pattern, col_map = pattern_converter.to_pattern(qc_mat_aligned, bw_nx_graph)
+    if validate:
+        validate_pattern_outputs(
+            bw_pattern,
+            rows=len(qc_mat_aligned),
+            brick_cols=len(qc_mat_aligned[0]) if qc_mat_aligned else 0,
+        )
 
-    return bw_pattern, col_map, decomposed_qc
+    result = TranspileResult(
+        pattern=bw_pattern,
+        colour_map=col_map,
+        decomposed_circuit=decomposed_qc,
+        instruction_matrix=qc_mat_aligned,
+        source_circuit=qc,
+        input_state=input_vector,
+    )
+    if return_result:
+        return result
+    return tuple(result)

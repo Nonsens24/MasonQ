@@ -1,15 +1,21 @@
 import numpy as np
 import pytest
 import unittest
+from collections import defaultdict
 from qiskit.quantum_info import Statevector
 from math import pi
 
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.circuit.library import MCXGate, MCU1Gate, PhaseGate, MCXRecursive
+from qiskit.circuit.library import MCXGate, PhaseGate
+
+try:
+    from qiskit.circuit.library import MCXRecursive
+except ImportError:  # Qiskit versions that removed the legacy class.
+    MCXRecursive = None
 
 from brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
 from brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
-    insert_rotations_adjecant_to_cx, linearise_multi_ctrl
+    insert_rotations_adjecant_to_cx, linearise_multi_ctrl, align_bricks
 
 
 # Dummy instruction class for testing
@@ -881,51 +887,60 @@ class TestInsertRotations(unittest.TestCase):
 class TestLineariseMultiCtrl(unittest.TestCase):
 
     def _count_type(self, qc, gate_type):
-        return sum(1 for inst, _, _ in qc.data if isinstance(inst, gate_type))
+        return sum(1 for instruction in qc.data if isinstance(instruction.operation, gate_type))
 
     def _names(self, qc):
-        return [inst.name for inst, _, _ in qc.data]
+        return [instruction.operation.name for instruction in qc.data]
 
     # ---------- MCX: ancilla handling ----------
 
+    @pytest.mark.skipif(MCXRecursive is None, reason="MCXRecursive unavailable in this Qiskit")
     def test_mcx_ge5_controls_uses_phase_anc_and_allocates_if_missing(self):
         q = QuantumRegister(6, "q")  # 5 ctrls + 1 target
         qc = QuantumCircuit(q)
         qc.append(MCXGate(5), q[:5] + [q[5]])  # k = 5
 
-        out = linearise_multi_ctrl(qc)
+        out = linearise_multi_ctrl(qc, multi_control_strategy="legacy-recursive")
 
-        # At least one ancilla register of size ≥ 2 must exist
+        # Legacy recursive MCX with five controls needs one clean ancilla.
         anc_sizes = [len(r) for r in out.qregs if r.name.startswith("anc")]
-        self.assertTrue(any(sz >= 2 for sz in anc_sizes))
+        self.assertEqual(sum(anc_sizes), 1)
 
-        # First instruction replaced by MCXRecursive and includes phase ancilla
-        inst, qubits, _ = out.data[0]
+        # First instruction is replaced by MCXRecursive and includes a clean ancilla.
+        instruction = out.data[0]
+        inst = instruction.operation
+        qubits = instruction.qubits
         self.assertIsInstance(inst, MCXRecursive)
-        # k ctrls + phase_anc + target → k + 2 qubits
+        # Qiskit order is k controls + target + ancilla.
         self.assertEqual(len(qubits), 5 + 2)
+        self.assertEqual(qubits[-2], q[5])
+        self.assertNotIn(qubits[-1], list(q))
 
+    @pytest.mark.skipif(MCXRecursive is None, reason="MCXRecursive unavailable in this Qiskit")
     def test_mcx_3_controls_no_extra_qubits(self):
         q = QuantumRegister(4, "q")  # 3 ctrls + 1 target
         qc = QuantumCircuit(q)
         qc.append(MCXGate(3), q[:3] + [q[3]])  # k = 3
 
-        out = linearise_multi_ctrl(qc)
+        out = linearise_multi_ctrl(qc, multi_control_strategy="legacy-recursive")
 
-        inst, qubits, _ = out.data[0]
+        instruction = out.data[0]
+        inst = instruction.operation
+        qubits = instruction.qubits
         self.assertIsInstance(inst, MCXRecursive)
         # No ancilla used for k=3 → k + 1 qubits
         self.assertEqual(len(qubits), 3 + 1)
 
     # ---------- MCU1 / MCPhase: linearisation sequence ----------
 
+    @pytest.mark.skipif(MCXRecursive is None, reason="MCXRecursive unavailable in this Qiskit")
     def test_mcu1_k4_sequence_compute_phase_uncompute(self):
         q = QuantumRegister(5, "q")  # 4 ctrls + 1 target
         qc = QuantumCircuit(q)
         theta = 0.123
-        qc.append(MCU1Gate(theta, 4), q[:4] + [q[4]])
+        qc.append(PhaseGate(theta).control(4), q[:4] + [q[4]])
 
-        out = linearise_multi_ctrl(qc)
+        out = linearise_multi_ctrl(qc, multi_control_strategy="legacy-recursive")
 
         # Expect: MCXRecursive (compute), 1-controlled Phase, MCXRecursive (uncompute)
         self.assertEqual(self._count_type(out, MCXRecursive), 2)
@@ -934,18 +949,23 @@ class TestLineariseMultiCtrl(unittest.TestCase):
         self.assertIn(names[1], ("cp", "cphase"))
 
         # For k=4 (<5): compute/uncompute use only phase_anc → k + 1 qubits
-        inst1, qubits1, _ = out.data[0]
-        inst3, qubits3, _ = out.data[2]
+        instruction1 = out.data[0]
+        instruction3 = out.data[2]
+        inst1 = instruction1.operation
+        qubits1 = instruction1.qubits
+        inst3 = instruction3.operation
+        qubits3 = instruction3.qubits
         self.assertEqual(len(qubits1), 4 + 1)
         self.assertEqual(len(qubits3), 4 + 1)
 
+    @pytest.mark.skipif(MCXRecursive is None, reason="MCXRecursive unavailable in this Qiskit")
     def test_mcu1_k5_sequence_uses_scratch_and_phase_anc(self):
         q = QuantumRegister(6, "q")  # 5 ctrls + 1 target
         qc = QuantumCircuit(q)
         theta = pi / 7
-        qc.append(MCU1Gate(theta, 5), q[:5] + [q[5]])
+        qc.append(PhaseGate(theta).control(5), q[:5] + [q[5]])
 
-        out = linearise_multi_ctrl(qc)
+        out = linearise_multi_ctrl(qc, multi_control_strategy="legacy-recursive")
 
         # Ensure at least two ancillas exist (phase + scratch)
         anc_sizes = [len(r) for r in out.qregs if r.name.startswith("anc")]
@@ -956,15 +976,73 @@ class TestLineariseMultiCtrl(unittest.TestCase):
         names = self._names(out)
         self.assertIn(names[1], ("cp", "cphase"))
 
-        # For k=5 (≥5): compute/uncompute use scratch_anc + phase_anc → k + 2 qubits
-        inst1, qubits1, _ = out.data[0]
-        inst3, qubits3, _ = out.data[2]
+        # For k=5: compute/uncompute target phase_anc and use scratch_anc as
+        # MCXRecursive's explicit clean ancilla. This order is semantically
+        # important: controls + phase target + scratch ancilla.
+        instruction1 = out.data[0]
+        instruction3 = out.data[2]
+        inst1 = instruction1.operation
+        qubits1 = instruction1.qubits
+        inst3 = instruction3.operation
+        qubits3 = instruction3.qubits
         self.assertEqual(len(qubits1), 5 + 2)
         self.assertEqual(len(qubits3), 5 + 2)
+        self.assertNotIn(qubits1[-2], list(q))
+        self.assertNotIn(qubits1[-1], list(q))
+        self.assertEqual(qubits1[-2], qubits3[-2])
+        self.assertEqual(qubits1[-1], qubits3[-1])
 
         # Controlled-phase should act on exactly [phase_anc, target] → 2 qubits total
-        inst2, qubits2, _ = out.data[1]
+        instruction2 = out.data[1]
+        inst2 = instruction2.operation
+        qubits2 = instruction2.qubits
         self.assertEqual(len(qubits2), 2)
+        self.assertEqual(qubits2[0], qubits1[-2])
+        self.assertEqual(qubits2[1], q[5])
+
+    def test_hls_strategy_does_not_attach_explicit_recursive_ancilla(self):
+        q = QuantumRegister(6, "q")  # 5 ctrls + 1 target
+        qc = QuantumCircuit(q)
+        qc.append(MCXGate(5), q[:5] + [q[5]])
+
+        out = linearise_multi_ctrl(qc, multi_control_strategy="hls")
+
+        instruction = out.data[0]
+        inst = instruction.operation
+        qubits = instruction.qubits
+        self.assertIsInstance(inst, MCXGate)
+        if MCXRecursive is not None:
+            self.assertNotIsInstance(inst, MCXRecursive)
+        self.assertEqual(len(qubits), 5 + 1)
+        self.assertFalse(any(r.name.startswith("anc") for r in out.qregs))
+
+    def test_hls_multi_control_phase_adds_only_phase_ancilla(self):
+        q = QuantumRegister(6, "q")
+        qc = QuantumCircuit(q)
+        qc.append(PhaseGate(pi / 7).control(5), q[:5] + [q[5]])
+
+        out = linearise_multi_ctrl(qc, multi_control_strategy="hls")
+
+        ancillas = [
+            qubit
+            for register in out.qregs
+            if register.name.startswith("anc")
+            for qubit in register
+        ]
+        self.assertEqual(len(ancillas), 1)
+        self.assertEqual(self._names(out), ["mcx", "cp", "mcx"])
+        self.assertEqual(list(out.data[0].qubits)[-1], ancillas[0])
+        self.assertEqual(list(out.data[1].qubits), [ancillas[0], q[5]])
+
+    def test_linearise_multi_ctrl_does_not_mutate_input_circuit(self):
+        q = QuantumRegister(6, "q")
+        qc = QuantumCircuit(q)
+        qc.append(PhaseGate(pi / 7).control(5), q[:5] + [q[5]])
+
+        _ = linearise_multi_ctrl(qc, multi_control_strategy="hls")
+
+        self.assertEqual(qc.num_qubits, 6)
+        self.assertFalse(any(r.name.startswith("anc") for r in qc.qregs))
 
     # ---------- Pass-through behavior ----------
 
@@ -978,4 +1056,51 @@ class TestLineariseMultiCtrl(unittest.TestCase):
         out = linearise_multi_ctrl(qc)
 
         self.assertEqual([n for n in self._names(out)], ["x", "measure"])
-        self.assertEqual(out.data[0][1], [q[0]])  # X on same qubit
+        self.assertEqual(list(out.data[0].qubits), [q[0]])  # X on same qubit
+        self.assertFalse(any(r.name.startswith("anc") for r in out.qregs))
+
+
+class TestCxLinearity(unittest.TestCase):
+
+    def _cx_endpoint_count(self, matrix):
+        return sum(
+            1
+            for row in matrix
+            for cell in row
+            for instruction in cell
+            if instruction.name.startswith("cx")
+        )
+
+    def test_brick_alignment_width_is_linear_in_cx_count(self):
+        for cx_count in range(1, 12):
+            qc = QuantumCircuit(2)
+            for _ in range(cx_count):
+                qc.cx(0, 1)
+
+            original, cx_matrix = instructions_to_matrix_dag(qc)
+            aligned = align_bricks(cx_matrix, original)
+
+            width = max((len(row) for row in aligned), default=0)
+            self.assertLessEqual(width, 2 * cx_count + 1)
+            self.assertEqual(self._cx_endpoint_count(aligned), 2 * cx_count)
+
+    def test_brick_alignment_keeps_one_brick_per_cx_group(self):
+        qc = QuantumCircuit(4)
+        for _ in range(5):
+            qc.cx(0, 1)
+            qc.cx(2, 3)
+
+        original, cx_matrix = instructions_to_matrix_dag(qc)
+        aligned = align_bricks(cx_matrix, original)
+        group_locations = defaultdict(set)
+        for row_index, row in enumerate(aligned):
+            for col_index, cell in enumerate(row):
+                for instruction in cell:
+                    if instruction.name.startswith("cx"):
+                        group_locations[instruction.name[2:-1]].add((row_index, col_index))
+
+        self.assertEqual(len(group_locations), 10)
+        for locations in group_locations.values():
+            columns = {col for _, col in locations}
+            self.assertEqual(len(columns), 1)
+            self.assertEqual(len(locations), 2)

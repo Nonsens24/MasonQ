@@ -7,13 +7,34 @@ name = "brickwork-transpiler"
 version = "0.1.0"
 description = "Layout-aware transpiler between Qiskit circuits and brickwork (MBQC) patterns."
 readme = "README.MD"
-requires-python = ">=3.9"
-license = { file = "MIT" }
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
 authors = [{ name = "Rex Fleur" }]
 dependencies = [
-  "numpy>=1.23",
-  "qiskit-terra>=0.25",
+  "numpy>=1.26",
+  "networkx>=3.2",
+  "qiskit>=2.4.1,<3",
+  "graphix>=0.3.5,<0.4",
+  "quimb>=1.11.2,<1.12",
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Homepage = "https://github.com/Nonsens24/brickwork_transpiler"
+Issues = "https://github.com/Nonsens24/brickwork_transpiler/issues"
+
+[project.scripts]
+masonq-demo = "brickwork_transpiler.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -26,10 +47,26 @@ dev = [
   "mypy>=1.8",
   "pre-commit>=3.5",
 ]
-mbqc = [
-  "graphix>=0.3.0,<0.4; python_version < '3.11'",
+viz = [
   "tensornetwork>=0.4",
-  "matplotlib>=3.7",
+  "matplotlib>=3.8",
+  "pylatexenc>=2.10",
+]
+qrs = [
+  "qiskit-aer>=0.17.2,<0.18",
+  "qiskit-algorithms>=0.4.0,<0.5",
+]
+ibm = [
+  "qiskit-ibm-runtime>=0.46.1,<0.47",
+]
+experiments = [
+  "matplotlib>=3.8",
+  "pandas>=2.2",
+  "scipy>=1.12",
+]
+mbqc = [
+  "tensornetwork>=0.4",
+  "matplotlib>=3.8",
 ]
 
 
@@ -37,11 +74,15 @@ mbqc = [
 where = ["src"]
 include = ["brickwork_transpiler*"]
 
+[tool.setuptools.package-data]
+brickwork_transpiler = ["py.typed"]
+
 # -----------------------
 # Pytest + Coverage
 # -----------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = [
   "--cov=src/brickwork_transpiler",
   "--cov-branch",
@@ -49,6 +90,12 @@ addopts = [
   "--cov-report=xml",
   "--cov-report=html",
   "-q",
+]
+markers = [
+  "unit: fast tests that do not run full MBQC/Qiskit simulations",
+  "integration: tests that cover multiple package modules",
+  "system: slow end-to-end Graphix/Qiskit equivalence tests",
+  "slow: expensive simulations or large transpilation experiments",
 ]
 
 [tool.coverage.run]
@@ -88,7 +135,7 @@ title = "Brickwork Transpiler coverage"
 # -----------------------
 [tool.black]
 line-length = 100
-target-version = ["py39", "py310", "py311"]
+target-version = ["py310", "py311", "py312", "py313"]
 extend-exclude = """
 (
   ^/build/
@@ -104,7 +151,7 @@ line_length = 100
 src_paths = ["src", "tests"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 warn_unused_configs = true
 warn_return_any = true
 warn_unused_ignores = true

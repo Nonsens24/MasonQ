@@ -3,10 +3,21 @@ from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit.library import MCXGate
 from qiskit_algorithms import AmplificationProblem, Grover
 import numpy as np
-from qiskit_aer.primitives import Sampler as AerSampler
 
 # This implementation follows the quantum recommendation system as presented by Sawerwain and Wroblewski (2019)
 # Link: https://sciendo.com/article/10.2478/amcs-2019-0011
+
+
+def _make_sampler(shots: int):
+    """Create the Qiskit 2.x/Aer SamplerV2 used by Grover."""
+    try:
+        from qiskit_aer.primitives import SamplerV2
+    except ImportError as exc:
+        raise ImportError(
+            "QRS Grover simulation requires `qiskit-aer>=0.17`. Install the "
+            'optional stack with `pip install -e ".[qrs]"`.'
+        ) from exc
+    return SamplerV2(default_shots=shots)
 
 
 def qrs(n_items, feature_mat, user_vector, feature_subset, g, plot_circ=False, plot_histogram=False,
@@ -239,7 +250,7 @@ def amplify_recommendations(qc: QuantumCircuit,
         optimal_iterations = int(np.floor(np.pi / 4 * np.sqrt(L / g)))
 
     # --- RUN GROVER ---
-    sampler = AerSampler(run_options={"shots": shots})
+    sampler = _make_sampler(shots)
     grover = Grover(sampler=sampler, iterations=optimal_iterations)
 
     print("Simulating circuit...")

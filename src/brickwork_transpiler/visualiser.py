@@ -1,4 +1,7 @@
 from fractions import Fraction
+import logging
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -6,8 +9,53 @@ import matplotlib.image as mpimg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.patches as mpatches
 
+logger = logging.getLogger(__name__)
 
-def plot_graph(G, cell_size=0.5, margin=0.5):
+
+def _safe_savefig(fig, path, **kwargs):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, **kwargs)
+
+
+def _safe_show(fig, *, show=True, close=True):
+    """Display a figure without letting IDE display-proxy failures crash code."""
+    if show:
+        try:
+            plt.show()
+        except Exception as exc:
+            logger.warning(
+                "Matplotlib display failed; the figure was not shown interactively. "
+                "This often happens when PyCharm's plot proxy rejects a large figure. "
+                "Use show=False/save_plot=True for large plots. Error: %s",
+                exc,
+            )
+    if close:
+        plt.close(fig)
+
+
+def _pattern_graph(pattern):
+    """Return `(nodes, edges)` for both legacy and current Graphix Pattern APIs."""
+    if hasattr(pattern, "get_graph"):
+        return pattern.get_graph()
+    graph = pattern.extract_graph()
+    return list(graph.nodes), list(graph.edges)
+
+
+def _pattern_angles(pattern):
+    """Return measurement angles in units of pi for legacy/current Graphix APIs."""
+    if hasattr(pattern, "get_angles"):
+        return pattern.get_angles()
+    try:
+        measurements = pattern.extract_opengraph().measurements
+    except Exception:
+        return {}
+    return {
+        node: float(measurement.to_bloch().angle)
+        for node, measurement in measurements.items()
+    }
+
+
+def plot_graph(G, cell_size=0.5, margin=0.5, show: bool = True, close: bool = True):
     """
     Draw G so that each adjacent node pair is spaced by `cell_size` inches.
 
@@ -54,7 +102,7 @@ def plot_graph(G, cell_size=0.5, margin=0.5):
     ax.set_ylim(n_rows - 1 + margin, -margin)
 
     plt.tight_layout()
-    plt.show()
+    _safe_show(fig, show=show, close=close)
 
 
 def print_matrix(matrix):
@@ -116,18 +164,21 @@ def plot_brickwork_graph_from_pattern(
         use_node_colours: bool = False,
         node_colours: dict = None,
         save_plot: bool = False,
+        save_path: str | None = None,
+        show: bool = True,
+        close: bool = True,
     ):
     if node_colours is None:
         node_colours = {}
 
     print("Visualising from pattern structure...")
 
-    nodes, edges = bw_pattern.get_graph()
+    nodes, edges = _pattern_graph(bw_pattern)
     G = nx.Graph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
 
-    angles = bw_pattern.get_angles() if show_angles else {}
+    angles = _pattern_angles(bw_pattern) if show_angles else {}
 
     rows = [r for (r, _) in nodes]
     cols = [c for (_, c) in nodes]
@@ -203,13 +254,13 @@ def plot_brickwork_graph_from_pattern(
             title_fontsize=12
         )
 
-    # plt.tight_layout()
-    plt.show()
+    if save_path is not None:
+        _safe_savefig(fig, save_path, bbox_inches="tight")
+    elif save_plot:
+        _safe_savefig(fig, f"images/graphs/{title}.pdf", format="pdf", bbox_inches="tight")
+        _safe_savefig(fig, f"images/graphs/{title}.png", format="png", dpi=300, bbox_inches="tight")
 
-    if save_plot:
-        fig.savefig(f"images/graphs/{title}.pdf", format="pdf", bbox_inches="tight")
-        fig.savefig(f"images/graphs/{title}.png", format="png", dpi=300, bbox_inches="tight")
-
+    _safe_show(fig, show=show, close=close)
 
 
 
@@ -225,9 +276,12 @@ def plot_brickwork_graph_encrypted(
         margin: float = 1.2,
         title: str = "UBQC structure",
         show_angles: bool = False,
+        save_plot: bool = True,
+        show: bool = True,
+        close: bool = True,
     ):
     # Get the graph
-    nodes, edges = bw_pattern.get_graph()
+    nodes, edges = _pattern_graph(bw_pattern)
     G = nx.Graph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
@@ -335,12 +389,11 @@ def plot_brickwork_graph_encrypted(
     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5')
     )
 
-    # plt.tight_layout()
-    plt.show()
+    if save_plot:
+        _safe_savefig(fig, f"images/graphs/{title}_enc.pdf", format="pdf", bbox_inches="tight")
+        _safe_savefig(fig, f"images/graphs/{title}_enc.png", format="png", dpi=300, bbox_inches="tight")
 
-    # Save the figure
-    fig.savefig(f"images/graphs/{title}_enc.pdf", format="pdf", bbox_inches="tight")
-    fig.savefig(f"images/graphs/{title}_enc.png", format="png", dpi=300, bbox_inches="tight")
+    _safe_show(fig, show=show, close=close)
 
 # plot_graphix_pattern_scalar_index.py
 
@@ -362,6 +415,8 @@ def plot_graphix_noise_graph(
         vmax: float = None,
         show_colorbar: bool = True,
         save: bool = False,
+        show: bool = True,
+        close: bool = True,
 ):
     """
     Plot a Graphix Pattern object, using measurement angles to color-code nodes as a continuous heatmap.
@@ -375,13 +430,13 @@ def plot_graphix_noise_graph(
     from matplotlib.colors import Normalize
 
     # Build graph
-    nodes, edges = pattern.get_graph()
+    nodes, edges = _pattern_graph(pattern)
     G = nx.Graph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
 
     # Measurement angles (multiples of π)
-    angles = pattern.get_angles()
+    angles = _pattern_angles(pattern)
 
     # Prepare heatmap values and normalization
     values = [angles.get(n, 0.0) for n in G.nodes()]
@@ -503,10 +558,10 @@ def plot_graphix_noise_graph(
 
     # Save if requested
     if save:
-        fig.savefig("noise_graph.pdf", bbox_inches='tight')
-        fig.savefig("noise_graph.png", dpi=300, bbox_inches='tight')
+        _safe_savefig(fig, "noise_graph.pdf", bbox_inches='tight')
+        _safe_savefig(fig, "noise_graph.png", dpi=300, bbox_inches='tight')
 
-    plt.show()
+    _safe_show(fig, show=show, close=close)
 
 
 def format_angle(angle, denom=4):
@@ -525,6 +580,3 @@ def format_angle(angle, denom=4):
         return f"π/{d}" if n > 0 else f"-π/{d}"
     else:
         return f"{n}π/{d}"
-
-
-

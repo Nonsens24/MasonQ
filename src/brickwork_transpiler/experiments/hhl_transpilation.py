@@ -1,16 +1,33 @@
 import os, csv, math, numpy as np
 
 from numpy.f2py.capi_maps import c2capi_map
-from qiskit import Aer, QuantumCircuit
+from qiskit import QuantumCircuit
 from qiskit.quantum_info import Operator
-from qiskit.utils import QuantumInstance
-import linear_solvers                # from quantum_linear_solvers
-from linear_solvers import HHL
 from scipy.sparse import diags
 import scipy as sp
 
-import src.brickwork_transpiler.utils
-from src.brickwork_transpiler import brickwork_transpiler, circuits
+import brickwork_transpiler.utils as bw_utils
+from brickwork_transpiler import brickwork_transpiler, circuits
+
+
+def _make_hhl_solver():
+    """Create the optional HHL solver without importing removed Qiskit APIs."""
+    try:
+        from linear_solvers import HHL
+    except ImportError as exc:
+        raise ImportError(
+            "HHL experiments require the optional external "
+            "`quantum_linear_solvers` package."
+        ) from exc
+
+    try:
+        return HHL()
+    except TypeError as exc:
+        raise RuntimeError(
+            "The installed `quantum_linear_solvers` package expects legacy "
+            "Qiskit QuantumInstance APIs. Use a version compatible with "
+            "Qiskit 2.x or keep this experiment on a separate legacy env."
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +45,7 @@ def get_writer(file_name: str,
         with open(full_path, "w", newline="") as fh:
             csv.writer(fh).writerow(header)
 
-    return src.brickwork_transpiler.utils.BufferedCSVWriter(full_path, header)
+    return bw_utils.BufferedCSVWriter(full_path, header)
 
 # # ---------------------------------------------------------------------------
 # # Utility: build a small-κ, Hermitian, 2^n × 2^n matrix
@@ -122,9 +139,6 @@ def experiment_hhl_transpilation(max_qubits: int = 5):
     """
     filename = "experiments_hhl.csv"
     writer   = get_writer(filename)
-
-    backend   = Aer.get_backend("aer_simulator_statevector")
-    qinstance = QuantumInstance(backend)
 
     for n in range(2, max_qubits + 1):
 
@@ -317,7 +331,7 @@ def experiment_hhl_transpilation(max_qubits: int = 5):
         from qiskit import transpile
 
         # 1) Build your circuit
-        hhl = HHL(quantum_instance=qinstance) # 1/m for testing width cost
+        hhl = _make_hhl_solver() # 1/m for testing width cost
         circ = hhl.construct_circuit(A_circuit, b_prep)
 
         # circ = circuits.QPE(N)

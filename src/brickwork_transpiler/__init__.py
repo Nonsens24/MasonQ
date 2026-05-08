@@ -1,6 +1,28 @@
-# src/ubqc_brickwork_transpiler/__init__.py
+"""Public API for MasonQ brickwork transpilation.
+
+The stable entry point is `transpile`. New code should request
+`return_result=True` and work with `TranspileResult`.
+"""
+
+from .brickwork_transpiler import transpile
+from .exceptions import BrickworkTranspilerError, BrickworkValidationError
+from .profiling import TimedResult, timed
+from .resources import ResourceEstimate, estimate_resources
+from .result import TranspileResult, VerificationResult
+from ._versions import show_versions
+
+__version__ = "0.1.0"
+
 __all__ = [
-    "bfk_encoder", "bricks", "brickwork_transpiler", "circuits",
-    "decomposer", "graph_builder", "gx_angle_extractor", "noise",
-    "pattern_converter", "utils", "visualiser", "algorithms",
+    "__version__",
+    "transpile",
+    "TranspileResult",
+    "VerificationResult",
+    "BrickworkTranspilerError",
+    "BrickworkValidationError",
+    "TimedResult",
+    "timed",
+    "ResourceEstimate",
+    "estimate_resources",
+    "show_versions",
 ]

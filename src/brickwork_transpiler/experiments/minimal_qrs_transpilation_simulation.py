@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
 
-from src.brickwork_transpiler import circuits, brickwork_transpiler, visualiser, utils
-from src.brickwork_transpiler.bfk_encoder import encode_pattern
+from brickwork_transpiler import brickwork_transpiler, circuits, utils, visualiser
+from brickwork_transpiler.bfk_encoder import encode_pattern
 # from src.ubqc_brickwork_transpiler.utils import extract_logical_to_physical, undo_layout_on_state
 
 
@@ -46,25 +46,22 @@ def build_graph():
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.circuit.library import Initialize
 
-# Prefer AerSimulator (qiskit-aer); fall back to Aer
-try:
-    from qiskit_aer import AerSimulator
-    _BACKEND = AerSimulator()
-except Exception:
-    from qiskit import Aer
-    _BACKEND = Aer.get_backend("aer_simulator")
+from brickwork_transpiler import circuits
 
-from qiskit import ClassicalRegister, transpile
-from qiskit.circuit.library import Initialize
-from src.brickwork_transpiler import circuits
 
-# If you don't already have a backend, define one like this:
-try:
-    from qiskit_aer import AerSimulator
-    _BACKEND = AerSimulator()
-except Exception:
-    from qiskit import Aer
-    _BACKEND = Aer.get_backend("aer_simulator")
+def _default_aer_backend():
+    """Return the modern Aer simulator backend used by this optional experiment."""
+    try:
+        from qiskit_aer import AerSimulator
+    except ImportError as exc:
+        raise ImportError(
+            "The minimal QRS simulation requires `qiskit-aer`. Install it with "
+            '`pip install -e ".[qrs]"` or `pip install qiskit-aer`.'
+        ) from exc
+    return AerSimulator()
+
+
+_BACKEND = _default_aer_backend()
 
 
 def run_and_plot_minimal_qrs_only_db(*,

@@ -1,11 +1,14 @@
 import math
 import itertools
+import logging
 from qiskit import QuantumCircuit
 import csv
 import os
 from qiskit.quantum_info import Statevector
 from qiskit.circuit.library import PermutationGate
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def assert_equal_up_to_global_phase(state1, state2, tol=1e-6):
@@ -59,7 +62,10 @@ def permute_qubits(circ: QuantumCircuit, perm: list[int]) -> QuantumCircuit:
     }
     clbit_map = {old: new for old, new in zip(circ.clbits, new_circ.clbits)}
 
-    for instr, qargs, cargs in circ.data:
+    for instruction in circ.data:
+        instr = instruction.operation
+        qargs = instruction.qubits
+        cargs = instruction.clbits
         new_qargs = [old_to_new[q] for q in qargs]
         new_cargs = [clbit_map[c] for c in cargs]
         new_circ.append(instr, new_qargs, new_cargs)
@@ -270,7 +276,7 @@ def calculate_ref_state_from_qiskit_circuit(bw_pattern, qc, transpiled_qc,
     # Extend input vector based on ancillae
     extended_input_vector = pad_with_plus_for_transpiled(input_vector=input_vector, qc=qc, transpiled_qc=transpiled_qc)
 
-    print("EVEQWEVQWEQWE: ", extended_input_vector.dim)
+    logger.debug("Extended input vector dimension: %s", extended_input_vector.dim)
 
     qubit_entries = [t[0] for t in bw_pattern.output_nodes]
 
@@ -775,10 +781,10 @@ def extract_logical_to_physical(qc_in, qc_out):
         return inv
 
     layout = getattr(qc_out, "layout", None)
-    print("layout", layout)
+    logger.debug("Transpiled layout: %s", layout)
 
     if layout is not None and getattr(layout, "initial_layout", None) is not None:
-        print("initial_layout", layout.initial_layout)
+        logger.debug("Initial layout: %s", layout.initial_layout)
         init = layout.initial_layout  # bijection between virtual qubits and pre-route physical indices
 
         # Compute logical -> pre-route physical
@@ -787,7 +793,7 @@ def extract_logical_to_physical(qc_in, qc_out):
         except Exception:
             # Version-agnostic fallback: build logical->physical from whatever orientation init exposes
             # Try to get a dict {phys:int -> virt:Qubit}
-            print(Exception)
+            logger.debug("Could not index initial_layout directly; no fallback is active.")
 
             # ptov = getattr(init, "get_virtual_bits", lambda: None)()
             # if ptov is not None:

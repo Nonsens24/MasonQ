@@ -5,8 +5,8 @@ from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
 
-from src.brickwork_transpiler import utils
-from src.brickwork_transpiler.utils import feature_to_affine_generator, feature_to_generator
+from brickwork_transpiler import utils
+from brickwork_transpiler.utils import feature_to_generator
 
 
 # This follows the quantum recommendation system as presented by Sawerwain and Wroblewski (2019)

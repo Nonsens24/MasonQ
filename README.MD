@@ -1,246 +1,172 @@
-<p align="center">
-  <img src="images/masonQ_final_logo.png" alt="MasonQ logo" width="180">
-</p>
+# MasonQ
 
-# 🧱 MasonQ
+MasonQ is a layout-aware transpiler from unitary Qiskit circuits to brickwork
+measurement-based quantum computation patterns. It lowers circuits to a
+brickwork-compatible `rz`/`rx`/`cx` basis, schedules them onto a brickwork
+instruction matrix, builds the corresponding graph, and emits a Graphix pattern
+with measurement angles.
 
-[![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)
-[![codecov](https://codecov.io/gh/Nonsens24/brickwork_transpiler/branch/main/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/brickwork_transpiler)
-[![PyPI](https://img.shields.io/badge/pypi-not_released-lightgrey.svg)](#)
-[![Python](https://img.shields.io/badge/python-%203.11-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://<org>.github.io/<repo>/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://black.readthedocs.io/)
-[![mypy](https://img.shields.io/badge/mypy-checked-informational)](http://mypy-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://docs.pytest.org/)
+The project is research-grade and currently alpha quality: the core pipeline is
+covered by unit and integration tests, while slower end-to-end Graphix/Qiskit
+statevector checks live in `tests/system_tests`.
 
-MasonQ is a brickwork graph (https://arxiv.org/abs/0807.4154) transpiler that converts unitary **Qiskit circuits** into Graphix
-**brickwork (MBQC)** patterns (https://github.com/TeamGraphix/graphix), with provable statevector
-equivalence, circuit optimisations, routing swaps, and ancilla management. Includes utilities for layout extraction, ancilla padding, 
-reference-state generation, and robust comparisons up to global phase.
+## Installation
 
-
----
-
-## 📖 Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-  - [Transpile](#transpile)
-  - [Padding inputs when the register widens](#padding-inputs-when-the-register-widens)
-  - [Extract and undo layout](#extract-and-undo-layout)
-  - [Reference state (layout-aware)](#reference-state-layout-aware)
-- [Testing](#testing)
-- [Design Notes](#design-notes)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [Citation](#citation)
-- [License](#license)
-- [Acknowledgements](#acknowledgements)
-
----
-
-## 🚀 Features
-
-- **Qiskit → Brickwork** translation that outputs an MBQC pattern plus an optional color map for visualization.
-- **Ancilla handling:** automatic padding with `|+⟩` on higher indices to match widened registers after transpilation.
-- **Reference evaluation:** computes layout-aware reference states using Qiskit and matches MBQC simulator output after reordering.
-- **Robust tests:** .
-
----
-## 📄 Relevant Papers
-
-- Universal Blind Quantum Computation (https://doi.org/10.48550/arXiv.0807.4154)
-- Quantum Algorithm for Linear Systems of Equations (https://doi.org/10.1103/PhysRevLett.103.150502)
-- Recommendation Systems With the Quantum K–NN and Grover Algorithms for Data Processing (https://doi.org/10.2478/amcs-2019-0011)
-- The Measurement Calculus (https://doi.org/10.48550/arXiv.0704.1263)
-- Optimizing Gate Decomposition for High-Level Quantum Programming (https://doi.org/10.22331/q-2025-03-12-1659)
-- Verification implemented (https://doi.org/10.48550/arXiv.1203.5217)
-
-
-### Other sources
-- ▶️ An introduction to measurement-based quantum computation by Robert Raussendorf: https://www.youtube.com/watch?v=zBjAoOW3xHk
----
-
-
-## ⚙️ Installation
-
-### From PyPI - Unavailable
-```bash
-pip install brickwork-transpiler
-````
-
-### From source
+From source:
 
 ```bash
-git https://github.com/Nonsens24/brickwork_transpiler.git
+git clone https://github.com/Nonsens24/brickwork_transpiler.git
 cd brickwork_transpiler
-pip install -e .
+python -m pip install -e ".[dev,viz,qrs]"
 ```
 
-### Optional (dev & docs)
+For IBM Quantum Runtime access:
 
 ```bash
-pip install -e ".[dev,docs]"
+python -m pip install -e ".[ibm]"
 ```
 
-**Requirements:** Python ≥ 3.9, NumPy, Qiskit (Terra). For MBQC simulation and plotting, install Graphix and (optionally) matplotlib.
+Use `qiskit-ibm-runtime` for IBM access. Do not install the deprecated
+`qiskit-ibm-provider` or `qiskit-ibmq-provider` packages in new environments.
 
----
+For library use only:
 
-## 🏃 Quick Start
-
-
-```python 
-from src.brickwork_transpiler import brickwork_transpiler, utils, visualiser, circuits
-
-  # 1) Build a small circuit
-  qc = QuantumCircuit(2)
-  qc.h(0); qc.cx(0, 1)
-  
-  input_vector = Statevector.from_label('++')
-  
-  # OR use a premade circuit
-  # qc, input_vector = circuits.minimal_qrs([0, 0])
-
-  # 2) Transpile the circuit
-  bw_pattern, col_map, transpiled_qc = brickwork_transpiler.transpile(
-      qc, input_vector,
-      routing_method="sabre",
-      layout_method="trivial",
-      with_ancillas=True
-  )
-
-
-  # 3) Visualise the brickwork graph
-  visualiser.plot_brickwork_graph_from_pattern(bw_pattern,
-                                               show_angles=True,
-                                               node_colours=col_map,
-                                               use_node_colours=True,
-                                               title="Brickwork graph: quick start test",
-                                               save_plot=True)
-
-  # 4) Simulate the measurement pattern 
-  # Preprocess data to standard form
-  bw_pattern.standardize()
-  bw_pattern.shift_signals()
-
-  # Get the output state from Graphix simulation
-  tn = bw_pattern.simulate_pattern(backend="tensornetwork", graph_prep="parallel")
-  psi = tn.to_statevector()
-
-  # Independently Calculate reference output and extend input vector with new ancillae qubits
-  reference_output = utils.calculate_ref_state_from_qiskit_circuit(bw_pattern, qc, transpiled_qc, input_vector)
-
-  # Compare output states up to global phase
-  if utils.assert_equal_up_to_global_phase(reference_output, psi):
-      print("Equivalent up to global phase!")
+```bash
+python -m pip install -e .
 ```
 
----
-
-## 🧑‍💻 Usage
-
-### Transpile
+## Quick Start
 
 ```python
-bw_pattern, col_map, qc_tr = brickwork_transpiler.transpile(
-    qc,                 # original circuit (QuantumCircuit)
-    input_vector,       # Statevector for 'qc'
-    routing_method="sabre",  # "sabre" | "basic" | ...
-    layout_method="trivial",   # "sabre" | "trivial" | ...
-    with_ancillas=True,      # permit ancilla expansion for linear scaling
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
+
+from brickwork_transpiler import transpile
+
+qc = QuantumCircuit(2)
+qc.h(0)
+qc.cx(0, 1)
+
+input_state = Statevector.from_label("++")
+
+result = transpile(
+    qc,
+    input_state,
+    routing_method="sabre",
+    layout_method="trivial",
+    with_ancillas=True,
+    return_result=True,
+)
+
+result.plot(save_path="images/graphs/quickstart.pdf", show=False)
+verification = result.verify()
+print(result.resources)
+print(verification.equivalent, verification.fidelity)
+```
+
+`transpile(...)` does not simulate automatically. It constructs and validates
+the brickwork pattern. Simulation happens only when you explicitly call
+`result.simulate_statevector()` or `result.verify()`.
+
+## Public Pipeline
+
+```python
+bw_pattern, col_map, decomposed_qc = brickwork_transpiler.transpile(
+    qc,
+    input_vector=None,
+    routing_method="sabre",
+    layout_method="trivial",
+    with_ancillas=True,
+    opt=3,
+    fallback_opt=1,
+    multi_control_strategy="hls",
 )
 ```
 
-### Padding inputs when the register widens
+For new code, prefer `return_result=True`. `TranspileResult` exposes:
 
-If the transpiled circuit has `k` more qubits than the original, pad the input with `|+⟩^{⊗k}` on **higher indices** (incorporated in reference state calculation) :
+- `result.pattern`
+- `result.decomposed_circuit`
+- `result.resources`
+- `result.plot(...)`
+- `result.simulate_statevector(...)`
+- `result.verify(...)`
+- `result.save_pattern_text(...)`
 
-```python
-sv_pad = utils.pad_with_plus_for_transpiled(input_vector, qc, qc_tr)
-# returns (|+>^{⊗k}) ⊗ |ψ_in>
-```
+`multi_control_strategy="hls"` uses Qiskit's current high-level synthesis path
+for multi-controlled gates. For reproducing older experiments, use
+`multi_control_strategy="legacy-recursive"` and record equivalence, ancilla
+count, CX count, and brickwork depth in your run notes.
 
+The decomposition adds explicit ancillas only when required: no package-added
+ancilla for plain HLS MCX, one phase workspace for multi-controlled phase
+rewrites, and one extra scratch qubit only for legacy recursive controls >= 5.
+The CX brick scheduler is regression-tested so aligned brick width grows
+linearly with the number of CX groups.
 
-### Reference state (layout-aware)
+## Development
 
-Produce a reference state on the **logical output subsystem** in the **Graphix output order** (tracing out ancillas and non-output logicals when necessary):
-
-```python
-  reference_output = utils.calculate_ref_state_from_qiskit_circuit(bw_pattern, 
-                                                                   qc, 
-                                                                   transpiled_qc, 
-                                                                   input_vector)
-```
-
----
-
-## 🧪 Testing
-
-
-Run tests:
+Fast development loop:
 
 ```bash
-pytest -q
+pytest tests/unit_and_integration_tests -m "not slow and not system"
 ```
 
-Recommended dev workflow:
+Full end-to-end checks:
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
-pre-commit run --all-files
-pytest -q
+pytest tests/system_tests
 ```
 
----
+## Reproducibility
 
-## 📝 Design Notes
+Print dependency versions in notebooks or benchmark logs:
 
-* **Ancilla policy.** New wires introduced by transpilation are treated as ancillas and placed **after** the logical block. Padding uses `( |+>^{⊗k} ) ⊗ |ψ⟩`.
+```python
+import brickwork_transpiler as bwt
 
----
-
-## 🗺️ Roadmap
-
-* [ ] Fix Sabre layout permutation on simulated state vector to compare with reference state vector
-* [ ] Qiskit HLS exact linearisation of MCU gates (https://quantum-journal.org/papers/q-2025-03-12-1659/)
-* [ ] Verification implemented (https://arxiv.org/abs/1203.5217)
-* [ ] Merge steps converting dependency graph to aligned matrix
-* [ ] Noise-aware fidelity comparison (Kraus channels)
-* [ ] Benchmarks across hardware-native layouts and couplings
-
----
-
-
-## 📚 Citation
-
-If this package supports your research, please cite:
-
-```bibtex
-@software{brickwork_transpiler,
-  author  = {R. Fleur},
-  title   = {Brickwork Transpiler},
-  year    = {2025},
-  url     = {https://github.com/Nonsens24/brickwork_transpiler}
-}
+bwt.show_versions()
 ```
 
----
+Known scope and caveats are documented in [docs/limitations.md](docs/limitations.md).
 
-## 📜 License
+The system tests are intentionally slow because they simulate complete
+Graphix/Qiskit equivalence cases.
 
-This project is licensed under the **Apache License 2.0**. See [LICENSE](./LICENSE) for details.
+## Package Layout
 
+- `brickwork_transpiler.brickwork_transpiler`: public orchestration API.
+- `brickwork_transpiler.decomposer`: Qiskit decomposition, DAG grouping, and
+  brick matrix alignment.
+- `brickwork_transpiler.graph_builder`: brickwork graph construction.
+- `brickwork_transpiler.pattern_converter`: measurement-angle injection and
+  Graphix pattern generation.
+- `brickwork_transpiler.utils`: statevector comparison, layout/reference-state
+  helpers, and small data utilities.
+- `brickwork_transpiler.algorithms`: example/research circuits, including QRS
+  and HHL-related work.
+- `brickwork_transpiler.experiments`: research scripts and plotting utilities.
 
----
+See [docs/architecture.md](docs/architecture.md) for the decomposition policy
+and algorithmic invariants.
 
-## 💡 Acknowledgements
+## Documentation
 
-* Thesis supervisors: Dr. Sebastian Feld and Dr. Tzula Propp
-* The Qiskit team for the layout and transpiler infrastructure.
-* The MBQC/Graphix community for pattern simulation and tooling.
-* The Feld group (Quantum Machine Learning) at TU Delft
+- [Documentation index](docs/README.md)
+- [Architecture and decomposition policy](docs/architecture.md)
+- [HLS decomposition and ancilla policy](docs/hls_decomposition.md)
+- [Transpiler file guide](docs/transpiler_file_guide.md)
+- [Scientist quickstart](docs/scientist_quickstart.md)
+- [Dependency migration](docs/dependency_migration.md)
+- [Limitations](docs/limitations.md)
+
+## License
+
+Proprietary. See [LICENSE](LICENSE).
+
+## References
+
+- Universal Blind Quantum Computation: https://arxiv.org/abs/0807.4154
+- The Measurement Calculus: https://arxiv.org/abs/0704.1263
+- Graphix: https://github.com/TeamGraphix/graphix
+- Qiskit: https://www.ibm.com/quantum/qiskit

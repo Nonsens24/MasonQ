@@ -68,6 +68,51 @@ print(verification.equivalent, verification.fidelity)
 the brickwork pattern. Simulation happens only when you explicitly call
 `result.simulate_statevector()` or `result.verify()`.
 
+## Simulation And Reference Checks
+
+The actual brickwork/MBQC object is the Graphix pattern:
+
+```python
+pattern = result.pattern
+```
+
+To simulate the brickwork pattern with Graphix:
+
+```python
+brickwork_state = result.simulate_statevector(
+    backend="tensornetwork",
+    graph_prep="parallel",
+    seed=0,
+)
+```
+
+To compare that Graphix result against a layout-aware Qiskit statevector
+reference:
+
+```python
+verification = result.verify(tolerance=1e-8)
+
+print(verification.equivalent)
+print(verification.fidelity)
+```
+
+For advanced debugging, the Qiskit reference can be computed directly from the
+original circuit, the Graphix output ordering, and the decomposed Qiskit circuit:
+
+```python
+from brickwork_transpiler import utils
+
+reference_state = utils.calculate_ref_state_from_qiskit_circuit(
+    result.pattern,
+    qc,
+    result.decomposed_circuit,
+    input_state,
+)
+```
+
+Use `verify()` for normal correctness checks. It runs both sides consistently
+and handles the output-order comparison used by the package.
+
 ## Public Pipeline
 
 ```python

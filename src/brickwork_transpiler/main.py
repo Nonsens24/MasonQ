@@ -63,6 +63,8 @@ def main():
     decomposed_qc = result.decomposed_circuit
     resources = result.resources
 
+    result.simulate()
+
     result.plot(show=True)
 
 

@@ -1,6 +1,6 @@
 
 [//]: # (![Logo]&#40;images/masonQ_nobg.png&#41;)
-![Logo](images/masonQ_dark.png)
+![](images/masonQ_dark.png)
 
 MasonQ is a layout-aware transpiler from unitary Qiskit circuits to brickwork
 measurement-based quantum computation patterns. It lowers circuits to a

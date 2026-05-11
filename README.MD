@@ -24,27 +24,31 @@ statevector checks live in `tests/system_tests`.
 
 ## Installation
 
-From source:
+For normal library use from source:
 
 ```bash
 git clone https://github.com/Nonsens24/brickwork_transpiler.git
 cd brickwork_transpiler
-python -m pip install -e ".[dev,viz,qrs]"
+python -m pip install -e .
 ```
 
-For IBM Quantum Runtime access:
+Install optional extras only when you need them:
 
 ```bash
-python -m pip install -e ".[ibm]"
+python -m pip install -e ".[viz]"          # plotting and Graphix tensor-network simulation helpers
+python -m pip install -e ".[qrs]"          # QRS examples using qiskit-aer and qiskit-algorithms
+python -m pip install -e ".[ibm]"          # IBM Quantum Runtime integration
+python -m pip install -e ".[experiments]"  # plotting/data tools for research scripts
+python -m pip install -e ".[dev]"          # pytest, coverage, formatting, typing, pre-commit
 ```
 
 Use `qiskit-ibm-runtime` for IBM access. Do not install the deprecated
 `qiskit-ibm-provider` or `qiskit-ibmq-provider` packages in new environments.
 
-For library use only:
+For development on the full repository:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev,viz,qrs,experiments]"
 ```
 
 ## Quick Start

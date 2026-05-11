@@ -8,7 +8,9 @@ Start here when using or maintaining MasonQ.
    conversion, inspect resources, and verify small circuits.
 2. [Limitations](limitations.md): supported circuit surface, verification cost,
    plotting caveats, and experimental modules.
-3. [Dependency migration](dependency_migration.md): Qiskit 2.x environment
+3. [Sparse instruction matrix](sparse_matrix.md): space-efficient matrix output
+   for large resource sweeps and diagnostics.
+4. [Dependency migration](dependency_migration.md): Qiskit 2.x environment
    setup and deprecated package removal.
 
 ## Developer Path

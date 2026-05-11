@@ -231,6 +231,9 @@ for row, column, instructions in sparse.iter_non_empty():
 Call `sparse.to_dense()` if you need the legacy dense `matrix[row][column]`
 form for debugging.
 
+See [Sparse instruction matrix](docs/sparse_matrix.md) for the complete API and
+dense-versus-sparse guidance.
+
 For timing comparisons while developing the scheduler:
 
 ```bash

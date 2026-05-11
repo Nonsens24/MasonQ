@@ -183,6 +183,9 @@ The sparse matrix preserves `rows`, `columns`, and `shape`, but stores only
 non-empty cells. Convert back with `sparse.to_dense()` only when you need the
 legacy matrix layout.
 
+See [Sparse instruction matrix](sparse_matrix.md) for the complete API and
+dense-versus-sparse guidance.
+
 ## Layout Methods
 
 Use `layout_method="trivial"` when you want the easiest debugging story:

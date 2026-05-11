@@ -57,7 +57,10 @@ def main():
         with_ancillas=True,
         fallback_opt=1,
         return_result=True,
+        return_stage="sparse_matrix",
     )
+
+    print(result)
 
     pattern = result.pattern
     decomposed_qc = result.decomposed_circuit

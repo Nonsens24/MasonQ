@@ -3,23 +3,28 @@
 ## Install
 
 ```bash
-python -m pip install -e ".[viz,qrs]"
+pip install masonq
 ```
 
-For IBM Quantum Runtime access:
+This includes the standard scientific stack for local transpilation,
+visualisation, Graphix/Qiskit verification, QRS examples, and research
+workflows.
+
+For optional IBM cloud/backend access in your own scripts:
 
 ```bash
-python -m pip install -e ".[ibm]"
+python -m pip install "masonq[ibm]"
 ```
 
-Use `qiskit-ibm-runtime`; the old `qiskit-ibm-provider` and
-`qiskit-ibmq-provider` packages are deprecated and should not be installed in
-new environments.
+MasonQ's core transpiler, Graphix simulation, and local Qiskit reference checks
+do not call IBM Runtime. Use `qiskit-ibm-runtime` only when you need IBM
+Quantum services; the old `qiskit-ibm-provider` and `qiskit-ibmq-provider`
+packages are deprecated and should not be installed in new environments.
 
 For development:
 
 ```bash
-python -m pip install -e ".[dev,viz,qrs]"
+python -m pip install -e ".[dev,ibm]"
 ```
 
 ## Recommended API

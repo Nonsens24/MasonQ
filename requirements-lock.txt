@@ -1,5 +1,6 @@
 # Historical development lockfile updated to remove deprecated Qiskit provider
-# packages. Prefer `pip install -e ".[dev,viz,qrs,ibm]"` for new environments.
+# packages. Prefer `pip install masonq` for users or `pip install -e ".[dev]"`
+# for local development. Add `[ibm]` only for IBM cloud/backend access.
 annotated-types==0.7.0
 anyio==4.10.0
 autoray==0.7.2

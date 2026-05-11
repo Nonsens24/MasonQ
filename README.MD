@@ -24,7 +24,17 @@ statevector checks live in `tests/system_tests`.
 
 ## Installation
 
-For normal library use from source:
+For the clean user install:
+
+```bash
+pip install masonq
+```
+
+This installs the normal scientific stack most users need: Qiskit, Graphix,
+plotting support, tensor-network simulation helpers, Aer/Qiskit algorithms for
+examples, and pandas/scipy for research workflows.
+
+From a local checkout during development:
 
 ```bash
 git clone https://github.com/Nonsens24/brickwork_transpiler.git
@@ -32,15 +42,17 @@ cd brickwork_transpiler
 python -m pip install -e .
 ```
 
-Install optional extras only when you need them:
+Only two extras should normally matter:
 
 ```bash
-python -m pip install -e ".[viz]"          # plotting and Graphix tensor-network simulation helpers
-python -m pip install -e ".[qrs]"          # QRS examples using qiskit-aer and qiskit-algorithms
-python -m pip install -e ".[ibm]"          # IBM Quantum Runtime integration
-python -m pip install -e ".[experiments]"  # plotting/data tools for research scripts
+python -m pip install -e ".[ibm]"          # optional IBM cloud/backend access for your own scripts
 python -m pip install -e ".[dev]"          # pytest, coverage, formatting, typing, pre-commit
 ```
+
+`ibm` is intentionally separate. MasonQ's core transpiler, Graphix simulation,
+and local Qiskit reference checks do not call IBM Runtime. Install this extra
+only if your own scripts need `qiskit-ibm-runtime` to authenticate with IBM
+Quantum services or query cloud backends.
 
 Use `qiskit-ibm-runtime` for IBM access. Do not install the deprecated
 `qiskit-ibm-provider` or `qiskit-ibmq-provider` packages in new environments.
@@ -48,7 +60,7 @@ Use `qiskit-ibm-runtime` for IBM access. Do not install the deprecated
 For development on the full repository:
 
 ```bash
-python -m pip install -e ".[dev,viz,qrs,experiments]"
+python -m pip install -e ".[dev,ibm]"
 ```
 
 ## Quick Start

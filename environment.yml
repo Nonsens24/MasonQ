@@ -10,4 +10,4 @@ dependencies:
   - llvmlite=0.44.0
   - pip:
       - "quimb>=1.11.2,<1.12"
-      - -e ".[dev,viz,qrs]"
+      - -e ".[dev]"

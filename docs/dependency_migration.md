@@ -5,7 +5,7 @@
 MasonQ now targets the current Qiskit 2.x packaging model:
 
 ```bash
-python -m pip install -e ".[dev,viz,qrs]"
+pip install masonq
 ```
 
 Core targets:
@@ -15,7 +15,8 @@ Core targets:
 - Graphix >= 0.3.5, < 0.4
 - Qiskit Aer >= 0.17.2, < 0.18 for local simulation helpers
 - qiskit-algorithms >= 0.4.0, < 0.5 for QRS/Grover helpers
-- qiskit-ibm-runtime >= 0.46.1, < 0.47 for optional IBM Runtime access
+- matplotlib, pylatexenc, pandas, and scipy for normal scientific workflows
+- qiskit-ibm-runtime >= 0.46.1, < 0.47 only for optional IBM cloud/backend access
 
 ## Deprecated Packages To Remove
 
@@ -42,8 +43,9 @@ conda activate masonq-qiskit24
 The environment file installs `numba`/`llvmlite` from conda before pip installs
 Graphix and Quimb. This avoids fragile source builds on macOS.
 
-IBM Runtime is optional. Install it only in environments that need cloud
-hardware access:
+IBM Runtime is optional. MasonQ's core transpiler and local verification path do
+not call it. Install it only in environments where your own scripts need IBM
+Quantum service authentication or cloud backend access:
 
 ```bash
 python -m pip install -e ".[ibm]"
@@ -55,7 +57,7 @@ If you must repair the existing environment:
 python -m pip uninstall -y qiskit-terra qiskit-ibm-provider qiskit-ibmq-provider graphix-ibmq
 python -m pip install --upgrade "qiskit>=2.4.1,<3" "qiskit-aer>=0.17.2,<0.18" \
   "qiskit-algorithms>=0.4.0,<0.5" "graphix>=0.3.5,<0.4"
-python -m pip install -e ".[dev,viz,qrs]"
+python -m pip install -e .
 ```
 
 ## Warning About `pkg_resources`

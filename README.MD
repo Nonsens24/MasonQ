@@ -5,7 +5,7 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)
 [![codecov](https://codecov.io/gh/Nonsens24/brickwork_transpiler/branch/main/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/brickwork_transpiler)
 [![PyPI](https://img.shields.io/badge/pypi-not_released-lightgrey.svg)](#)
-[![Python](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](#)
 [![Docs](https://img.shields.io/badge/docs-local-blue.svg)](docs/README.md)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://black.readthedocs.io/)
@@ -34,11 +34,15 @@ This installs the normal scientific stack most users need: Qiskit, Graphix,
 plotting support, tensor-network simulation helpers, Aer/Qiskit algorithms for
 examples, and pandas/scipy for research workflows.
 
+Use Python 3.10, 3.11, or 3.12. MasonQ uses Graphix 0.3.5, which requires
+NumPy 2, and pins NumPy below 2.3 so it stays within the reliable Numba/llvmlite
+wheel range on macOS.
+
 From a local checkout during development:
 
 ```bash
-git clone https://github.com/Nonsens24/brickwork_transpiler.git
-cd masonq
+git clone https://github.com/Nonsens24/brickwork_transpiler.git MasonQ
+cd MasonQ
 python -m pip install -e .
 ```
 

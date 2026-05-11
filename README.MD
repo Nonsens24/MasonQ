@@ -38,7 +38,7 @@ From a local checkout during development:
 
 ```bash
 git clone https://github.com/Nonsens24/brickwork_transpiler.git
-cd brickwork_transpiler
+cd masonq
 python -m pip install -e .
 ```
 

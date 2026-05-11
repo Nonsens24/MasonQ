@@ -104,6 +104,26 @@ implementation keeps these invariants:
 The fast test suite contains regression tests for these invariants in
 `tests/unit_and_integration_tests/test_decomposer.py::TestCxLinearity`.
 
+## Optimization Objective
+
+The package objective is minimal graph depth, not minimum Qiskit gate count:
+
+```text
+graph_depth = 4 * brick_columns + 1
+```
+
+Qiskit is trusted to decompose the input circuit into an equivalent circuit in
+the supported basis. MasonQ's job starts after that: schedule the decomposed
+operations into a brickwork graph with as little graph depth as possible while
+preserving the decomposed circuit semantics.
+
+When discussing future sparse representations, "sparse IR" means storing only
+real scheduled operations and CX brick groups instead of storing a full
+`rows x columns` matrix containing many empty cells. MasonQ now exposes a first
+step in that direction with `SparseInstructionMatrix` and
+`return_stage="sparse_matrix"`. The dense matrix remains the internal default
+for pattern generation, debugging, and plotting.
+
 ## Public Source Files
 
 ### `src/brickwork_transpiler/__init__.py`
@@ -163,6 +183,12 @@ Defines `ResourceEstimate` and `estimate_resources`. It reports decomposed
 Qiskit qubits, depth, gate count, CX count, brick rows, brick columns, and graph
 node count.
 
+### `src/brickwork_transpiler/sparse.py`
+
+Defines `SparseInstructionMatrix`, a space-efficient aligned brick matrix view
+that stores only non-empty cells plus the original row/column dimensions. It is
+returned by `transpile(..., return_stage="sparse_matrix")`.
+
 ### `src/brickwork_transpiler/validation.py`
 
 Contains structural validation checks for instruction matrices, graph data, and
@@ -207,8 +233,11 @@ pipeline unless a brick abstraction is formally adopted.
 
 ### `src/brickwork_transpiler/bfk_encoder.py`
 
-Support code for BFK-style encoding workflows. This is not part of the core
-transpiler API.
+Support code for BFK-style encoding workflows. It records Alice's pi/4-grid
+`|+_theta>` qubit preparations and Bob-facing blinded measurement angles
+`delta = phi' + theta + r (mod 2)`. The core transpiler does not call this
+automatically; experiments should call `encode_pattern(..., return_metadata=True)`
+on an already-built brickwork pattern.
 
 ### `src/brickwork_transpiler/gx_angle_extractor.py`
 

@@ -166,6 +166,77 @@ For manual checks, compare `result.simulate_statevector()` with
 `result.qiskit_reference_statevector()`. Both are returned in Graphix output
 order.
 
+## Resource-Only And Stage Returns
+
+For large sweeps you often do not need a full Graphix pattern. Use
+`return_stage` to stop early:
+
+```python
+resources = transpile(qc, return_stage="resources")
+matrix = transpile(qc, return_stage="matrix")
+sparse_matrix = transpile(qc, return_stage="sparse_matrix")
+decomposed_qc = transpile(qc, return_stage="decomposed_circuit")
+```
+
+## BFK Encoding Metadata
+
+For blind-computation experiments, use the BFK helpers after constructing a
+brickwork pattern:
+
+```python
+from brickwork_transpiler import encode_pattern
+
+encoded_pattern, alice_log = encode_pattern(
+    result.pattern,
+    return_metadata=True,
+)
+
+preparations = alice_log["preparations"]
+measurements = alice_log["measurements"]
+```
+
+`preparations` records Alice's Protocol-1 qubit encodings
+`|+_theta>`, with `theta` sampled from `{0, 1/4, ..., 7/4}` in units of pi.
+`measurements` records Bob's blinded angles
+`delta = phi' + theta + r (mod 2)` and the outcome flip bit `r`.
+
+By default supplied `theta_lookup` values are checked against the pi/4 grid.
+Use `quantum_outputs=True` when modelling Protocol 3 quantum outputs, where
+output qubits are sent as `|+>`.
+
+The main scheduler objective is minimal graph depth:
+
+```text
+graph_depth = 4 * brick_columns + 1
+```
+
+`resources.graph_depth` reports this objective directly. `return_mat=True` is
+still supported and is equivalent to `return_stage="matrix"`.
+
+Use `return_stage="sparse_matrix"` when you want the aligned brick instruction
+matrix without storing every empty row/column cell. The sparse object keeps the
+same dimensions and stores only non-empty cells:
+
+```python
+sparse = transpile(qc, return_stage="sparse_matrix")
+
+print(sparse.shape)
+print(sparse.non_empty_cells)
+print(sparse.occupancy)
+
+for row, column, instructions in sparse.iter_non_empty():
+    ...
+```
+
+Call `sparse.to_dense()` if you need the legacy dense `matrix[row][column]`
+form for debugging.
+
+For timing comparisons while developing the scheduler:
+
+```bash
+python benchmarks/benchmark_graph_depth.py
+```
+
 ## Public Pipeline
 
 ```python

@@ -1,6 +1,5 @@
-import networkx as nx
-from graphix.generator import generate_from_graph
-from . import graph_builder, visualiser
+from . import graph_builder
+from .pattern_converter import _generate_from_graph
 
 
 #Follows a, b, c, 0 scheme
@@ -25,7 +24,7 @@ def arbitrary_brick(a, b, c, input=None):
     outputs = [(0, 4)]
 
     # See Graphix generator documentation: https://graphix.readthedocs.io/en/v0.2.1/_modules/graphix/generator.html
-    brick_pattern = generate_from_graph(inside_graph, angles, inputs, outputs)
+    brick_pattern = _generate_from_graph(inside_graph, angles, inputs, outputs)
 
     return brick_pattern
 
@@ -49,7 +48,7 @@ def arbitrary_prep_brick(a, b, c):
     outputs = [(0, 4)]
 
     # See Graphix generator documentation: https://graphix.readthedocs.io/en/v0.2.1/_modules/graphix/generator.html
-    brick_pattern = generate_from_graph(inside_graph, angles, inputs, outputs)
+    brick_pattern = _generate_from_graph(inside_graph, angles, inputs, outputs)
 
     return brick_pattern
 
@@ -78,14 +77,14 @@ def CX_bottom_target_brick(inputs=None):
         (1, 3): 1/4
     }
 
-    if input is None:
+    if inputs is None:
         inputs = [] # Initialise to the |+> state
     else:
         inputs = [(0, 0), (1, 0)]
 
     outputs = [(0, 4), (1, 4)]
 
-    brick_pattern = generate_from_graph(inside_graph, angles, inputs, outputs)
+    brick_pattern = _generate_from_graph(inside_graph, angles, inputs, outputs)
 
     return brick_pattern
 
@@ -114,13 +113,13 @@ def CX_top_target_brick(inputs=None):
         (1, 3): 0.0
     }
 
-    if input is None:
+    if inputs is None:
         inputs = [] # Initialise to the |+> state
     else:
         inputs = [(0, 0), (1, 0)]
 
     outputs = [(0, 4), (1, 4)]
 
-    brick_pattern = generate_from_graph(inside_graph, angles, inputs, outputs)
+    brick_pattern = _generate_from_graph(inside_graph, angles, inputs, outputs)
 
     return brick_pattern

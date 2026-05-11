@@ -148,6 +148,41 @@ The structured result exposes the core resource estimate:
 result.resources
 ```
 
+For resource sweeps, you can stop before Graphix pattern creation:
+
+```python
+resources = transpile(qc, return_stage="resources")
+sparse_matrix = transpile(qc, return_stage="sparse_matrix")
+
+print(resources.brick_columns)
+print(resources.graph_depth)
+print(resources.graph_nodes)
+```
+
+MasonQ's scheduler objective is minimal graph depth:
+
+```text
+graph_depth = 4 * brick_columns + 1
+```
+
+Use `return_stage="matrix"` when you want to inspect the aligned brick
+instruction matrix directly. The older `return_mat=True` still works and is
+equivalent to `return_stage="matrix"`.
+
+Use `return_stage="sparse_matrix"` for large circuits where the dense aligned
+matrix would contain many empty cells:
+
+```python
+sparse = transpile(qc, return_stage="sparse_matrix")
+
+for row, column, instructions in sparse.iter_non_empty():
+    print(row, column, [instruction.name for instruction in instructions])
+```
+
+The sparse matrix preserves `rows`, `columns`, and `shape`, but stores only
+non-empty cells. Convert back with `sparse.to_dense()` only when you need the
+legacy matrix layout.
+
 ## Layout Methods
 
 Use `layout_method="trivial"` when you want the easiest debugging story:
@@ -170,3 +205,26 @@ result = transpile(
 computes the Qiskit reference from `result.decomposed_circuit`, and permutes
 that reference into Graphix output order. For manual checks, use
 `result.output_permutation()` and `result.qiskit_reference_statevector()`.
+
+## BFK Experiment Logs
+
+The BFK encoder follows Protocol 1 of Broadbent-Fitzsimons-Kashefi: Alice
+prepares every graph qubit as `|+_theta>`, where `theta` is sampled from the
+eight pi/4 angles, and sends Bob blinded measurement angles
+`delta = phi' + theta + r (mod 2)`.
+
+```python
+from brickwork_transpiler import encode_pattern
+
+encoded_pattern, alice_log = encode_pattern(
+    result.pattern,
+    return_metadata=True,
+)
+
+alice_log["preparations"]   # qubit, theta, theta_radians, state label
+alice_log["measurements"]   # phi, theta, r, delta, dependencies
+```
+
+Supplied `theta_lookup` values are validated against the pi/4 grid by default.
+Set `quantum_outputs=True` for Protocol 3-style quantum-output experiments,
+where output qubits are prepared as `|+>`.

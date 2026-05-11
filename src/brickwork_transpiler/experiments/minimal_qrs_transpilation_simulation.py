@@ -30,7 +30,7 @@ def build_graph():
     pattern_writer = utils.BufferedCSVWriter(file_path + "minimal_qrs_experiment_pattern.txt", ["pattern"])
     log_writer = utils.BufferedCSVWriter(file_path + "minimal_qrs_experiment_log.txt", ["log"])
 
-    encoded_pattern, log_alice = encode_pattern(bw_pattern)
+    encoded_pattern, log_alice = encode_pattern(bw_pattern, return_metadata=True)
     pattern_writer.set("pattern", encoded_pattern.print_pattern(lim=2 ** 32))
     log_writer.set("log", log_alice)
 

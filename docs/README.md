@@ -29,3 +29,9 @@ Start here when using or maintaining MasonQ.
 - `multi_control_strategy="hls"` is the default.
 - Explicit package-added ancillas are demand-driven, not unconditional.
 - The CX brick alignment pass must remain linear in the number of CX groups.
+- MasonQ's scheduler objective is minimal graph depth:
+  `graph_depth = 4 * brick_columns + 1`.
+- Use `return_stage="resources"` for resource sweeps that do not need Graphix
+  pattern materialization.
+- Use `return_stage="sparse_matrix"` to inspect large aligned matrices without
+  storing empty cells.

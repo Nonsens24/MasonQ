@@ -1,20 +1,29 @@
 # tests/test_bfk_encoder.py
 import math
+
 import numpy as np
 import pytest
 
 graphix = pytest.importorskip("graphix")
 
-from brickwork_transpiler import brickwork_transpiler
-from graphix.command import M, X, Z
-from brickwork_transpiler.bfk_encoder import encode_pattern
-import pytest
-
-graphix = pytest.importorskip("graphix")
-from graphix import Pattern
-from graphix.command import M
 import brickwork_transpiler.circuits as circuits
+from brickwork_transpiler import brickwork_transpiler
+from brickwork_transpiler.bfk_encoder import encode_pattern, sample_qubit_preparations
+from graphix import Pattern
+from graphix.command import M, X, Z
+from graphix.measurements import Measurement
 
+
+if not hasattr(M, "angle"):
+    M.angle = property(lambda self: self.measurement.angle)
+if not hasattr(M, "plane"):
+    M.plane = property(lambda self: self.measurement.plane.name)
+
+
+def _m(node, plane, angle, s_domain=None, t_domain=None):
+    s_domain = set() if s_domain is None else set(s_domain)
+    t_domain = set() if t_domain is None else set(t_domain)
+    return M(node, getattr(Measurement, plane)(angle), s_domain, t_domain)
 
 
 def _angles_close(a, b, tol=1e-12):
@@ -98,18 +107,12 @@ def test_bfk_encoder_non_mutating_on_brickwork(bw_pattern):
     # Output distinct
     assert [id(c) for c in new_pat._Pattern__seq] != orig_seq_ids
 
-
-
 def _mk_pattern(seq):
     """Helper: build a Pattern with a given private sequence."""
     p = Pattern()
     # We match the function's use of the private field for maximum fidelity.
     p._Pattern__seq = list(seq)
     return p
-
-
-def _angles_close(a, b, tol=1e-12):
-    return abs((a - b + 2) % 2) < tol or abs((b - a + 2) % 2) < tol or math.isclose(a, b, rel_tol=0, abs_tol=tol)
 
 
 def test_blinds_to_delta_and_records_metadata():
@@ -125,10 +128,10 @@ def test_blinds_to_delta_and_records_metadata():
     s2, t2 = {8}, {4}
 
     seq = [
-        M(1, "XY", phi1, s1, t1),
+        _m(1, "XY", phi1, s1, t1),
         X(99),  # byproduct for the previous M
         Z(101),
-        M(2, "XY", phi2, s2, t2),
+        _m(2, "XY", phi2, s2, t2),
     ]
     pat = _mk_pattern(seq)
 
@@ -187,9 +190,9 @@ def test_theta_lookup_overrides_rng_and_rng_used_for_others():
     # Three measurements, only node 2 has θ pre-set
     phi = [0.00, 0.50, 0.25]
     seq = [
-        M(1, "XY", phi[0], set(), set()),
-        M(2, "XY", phi[1], {1}, {2}),
-        M(3, "XY", phi[2], {3}, {4}),
+        _m(1, "XY", phi[0], set(), set()),
+        _m(2, "XY", phi[1], {1}, {2}),
+        _m(3, "XY", phi[2], {3}, {4}),
     ]
     pat = _mk_pattern(seq)
 
@@ -217,10 +220,10 @@ def test_theta_lookup_overrides_rng_and_rng_used_for_others():
 
 def test_remove_dependencies_strips_XZ_and_keeps_M():
     seq = [
-        M(1, "XY", 0.0, set(), set()),
+        _m(1, "XY", 0.0, set(), set()),
         X(7),
         Z(8),
-        M(2, "XY", 0.25, set(), set()),
+        _m(2, "XY", 0.25, set(), set()),
         Z(9),
         X(10),
     ]
@@ -252,7 +255,7 @@ def test_xz_before_first_measurement_are_not_recorded_and_strip_behavior():
     seq = [
         X(5),
         Z(6),
-        M(1, "XY", 0.5, set(), set()),
+        _m(1, "XY", 0.5, set(), set()),
     ]
     pat = _mk_pattern(seq)
 
@@ -269,7 +272,7 @@ def test_xz_before_first_measurement_are_not_recorded_and_strip_behavior():
 
 
 def test_pattern_is_deepcopied_not_mutated():
-    seq = [M(1, "XY", 0.75, set(), set())]
+    seq = [_m(1, "XY", 0.75, set(), set())]
     pat = _mk_pattern(seq)
     original_seq_ids = [id(c) for c in pat._Pattern__seq]
 
@@ -282,7 +285,7 @@ def test_pattern_is_deepcopied_not_mutated():
 
 
 def test_rng_reproducibility_with_same_seed_and_no_theta_lookup():
-    seq = [M(i, "XY", 0.0, set(), set()) for i in range(1, 21)]
+    seq = [_m(i, "XY", 0.0, set(), set()) for i in range(1, 21)]
     pat = _mk_pattern(seq)
 
     seed = 314159
@@ -308,7 +311,7 @@ def test_mod2_wraparound_of_delta():
     """
     phi = 1.75
     theta = 0.50
-    seq = [M(1, "XY", phi, set(), set())]
+    seq = [_m(1, "XY", phi, set(), set())]
     pat = _mk_pattern(seq)
 
     # θ via lookup; RNG picks r deterministically from seed
@@ -320,25 +323,11 @@ def test_mod2_wraparound_of_delta():
     expected = (phi + theta + r) % 2
     assert _angles_close(new_M.angle, expected), "δ must be computed modulo 2 (units of π)"
 
-def _mk_pattern(seq):
-    p = Pattern()
-    p._Pattern__seq = list(seq)
-    return p
-
-
-def _angles_close(a, b, tol=1e-12):
-    # a, b are in units of π; equality up to mod 2.
-    return math.isclose(((a - b) % 2.0), 0.0, abs_tol=tol) or math.isclose(((b - a) % 2.0), 0.0, abs_tol=tol)
-
-
-def _extract_Ms(pat: Pattern):
-    return [cmd for cmd in pat._Pattern__seq if isinstance(cmd, M)]
-
 
 def test_info_delta_matches_emitted_angle_and_formula():
     phi = 0.75
     theta = 0.25
-    pat = _mk_pattern([M(1, "XY", phi, {1}, {2})])
+    pat = _mk_pattern([_m(1, "XY", phi, {1}, {2})])
 
     rng = np.random.default_rng(123)
     new_pat, info = encode_pattern(pat, theta_lookup={1: theta}, rng=rng)
@@ -355,7 +344,7 @@ def test_negative_and_out_of_range_phi_are_normalized_mod_2():
     phi_vals = [-0.25, 2.6]
     thetas = [0.5, 1.0]
     nodes = [1, 2]
-    seq = [M(n, "XY", p, set(), set()) for n, p in zip(nodes, phi_vals)]
+    seq = [_m(n, "XY", p, set(), set()) for n, p in zip(nodes, phi_vals)]
     pat = _mk_pattern(seq)
 
     rng = np.random.default_rng(7)  # fixes r
@@ -372,9 +361,9 @@ def test_negative_and_out_of_range_phi_are_normalized_mod_2():
 
 def test_planes_preserved_for_various_planes():
     seq = [
-        M(1, "XY", 0.0, set(), set()),
-        M(2, "XZ", 0.25, set(), set()),
-        M(3, "YZ", 0.5, set(), set()),
+        _m(1, "XY", 0.0, set(), set()),
+        _m(2, "XZ", 0.25, set(), set()),
+        _m(3, "YZ", 0.5, set(), set()),
     ]
     pat = _mk_pattern(seq)
     new_pat, info = encode_pattern(pat, rng=np.random.default_rng(0))
@@ -384,10 +373,10 @@ def test_planes_preserved_for_various_planes():
 
 def test_multiple_byproducts_grouped_until_next_measurement_and_trailing():
     seq = [
-        M(1, "XY", 0.0, set(), set()),
+        _m(1, "XY", 0.0, set(), set()),
         X(10), X(11), Z(12),
         X(13),  # still belongs to M1
-        M(2, "XY", 0.0, set(), set()),
+        _m(2, "XY", 0.0, set(), set()),
         Z(20), Z(21), X(22),
         # trailing byproducts should attach to the last M (M2)
         Z(23), X(24),
@@ -413,11 +402,11 @@ def test_remove_dependencies_only_strips_XZ_but_keeps_other_unknown_commands():
 
     seq = [
         OtherCmd("before"),
-        M(1, "XY", 0.0, set(), set()),
+        _m(1, "XY", 0.0, set(), set()),
         X(7),
         OtherCmd("between"),
         Z(8),
-        M(2, "XY", 0.0, set(), set()),
+        _m(2, "XY", 0.0, set(), set()),
         OtherCmd("after"),
     ]
     pat = _mk_pattern(seq)
@@ -438,18 +427,18 @@ def test_remove_dependencies_only_strips_XZ_but_keeps_other_unknown_commands():
 
 
 def test_theta_lookup_is_respected_for_provided_nodes_and_augmented_for_others():
-    seq = [M(1, "XY", 0.0, set(), set()),
-           M(2, "XY", 0.0, set(), set()),
-           M(3, "XY", 0.0, set(), set())]
+    seq = [_m(1, "XY", 0.0, set(), set()),
+           _m(2, "XY", 0.0, set(), set()),
+           _m(3, "XY", 0.0, set(), set())]
     pat = _mk_pattern(seq)
 
-    t_lookup = {2: 0.3}  # deliberately off-grid; must be used as-is
+    t_lookup = {2: 0.75}
     rng = np.random.default_rng(123)
 
     _, info = encode_pattern(pat, theta_lookup=t_lookup, rng=rng)
 
     # Provided value must be unchanged
-    assert info[1]["theta"] == 0.3
+    assert info[1]["theta"] == 0.75
 
     # For nodes 1 and 3, θ must be on the 8-point grid
     for i in (0, 2):
@@ -457,11 +446,11 @@ def test_theta_lookup_is_respected_for_provided_nodes_and_augmented_for_others()
 
     # theta_lookup should be augmented with new nodes but not overwrite existing key 2
     assert set(t_lookup.keys()) == {1, 2, 3}
-    assert t_lookup[2] == 0.3
+    assert t_lookup[2] == 0.75
 
 
 def test_rng_seed_sensitivity_affects_delta_when_no_lookup():
-    seq = [M(i, "XY", 0.25, set(), set()) for i in range(1, 6)]
+    seq = [_m(i, "XY", 0.25, set(), set()) for i in range(1, 6)]
     pat = _mk_pattern(seq)
 
     new1, info1 = encode_pattern(_mk_pattern(seq), rng=np.random.default_rng(1))
@@ -474,7 +463,7 @@ def test_rng_seed_sensitivity_affects_delta_when_no_lookup():
 
 
 def test_r_is_always_0_or_1():
-    seq = [M(i, "XY", 0.0, set(), set()) for i in range(1, 64)]
+    seq = [_m(i, "XY", 0.0, set(), set()) for i in range(1, 64)]
     pat = _mk_pattern(seq)
     _, info = encode_pattern(pat, rng=np.random.default_rng(12345))
     assert set(e["r"] for e in info).issubset({0, 1})
@@ -483,7 +472,7 @@ def test_r_is_always_0_or_1():
 def test_domains_are_copied_not_aliased():
     s = {1}
     t = {2}
-    m = M(1, "XY", 0.0, s, t)
+    m = _m(1, "XY", 0.0, s, t)
     pat = _mk_pattern([m])
 
     new_pat, info = encode_pattern(pat, rng=np.random.default_rng(0))
@@ -509,14 +498,63 @@ def test_empty_pattern_round_trip():
     assert info == []
 
 
-def test_non_grid_theta_lookup_is_used_in_delta_computation():
-    # Supply a non-grid theta (e.g., 0.33) and verify it is used literally
+def test_non_grid_theta_lookup_is_rejected_by_default():
+    pat = _mk_pattern([_m(1, "XY", 0.6, set(), set())])
+
+    with pytest.raises(ValueError, match="multiples of pi/4"):
+        encode_pattern(pat, theta_lookup={1: 0.33}, rng=np.random.default_rng(9))
+
+
+def test_non_grid_theta_lookup_can_be_allowed_for_legacy_experiments():
     phi = 0.6
     theta = 0.33
-    pat = _mk_pattern([M(1, "XY", phi, set(), set())])
+    pat = _mk_pattern([_m(1, "XY", phi, set(), set())])
 
-    rng = np.random.default_rng(9)  # fixes r
-    new_pat, info = encode_pattern(pat, theta_lookup={1: theta}, rng=rng)
+    rng = np.random.default_rng(9)
+    new_pat, info = encode_pattern(
+        pat,
+        theta_lookup={1: theta},
+        rng=rng,
+        validate_theta_grid=False,
+    )
     m = _extract_Ms(new_pat)[0]
     expected = (phi + theta + info[0]["r"]) % 2.0
     assert _angles_close(m.angle, expected)
+
+
+def test_sample_qubit_preparations_covers_all_pattern_nodes():
+    pat = _mk_pattern([
+        _m(1, "XY", 0.0, set(), set()),
+        X(2),
+        Z(3),
+    ])
+    pat._Pattern__output_nodes = [4]
+
+    theta_lookup = {1: 0.25}
+    preps = sample_qubit_preparations(
+        pat,
+        theta_lookup=theta_lookup,
+        rng=np.random.default_rng(123),
+    )
+
+    prep_by_node = {prep.node: prep for prep in preps}
+    assert set(prep_by_node) == {1, 2, 3, 4}
+    assert prep_by_node[1].theta == 0.25
+    assert all(prep.theta in {k / 4.0 for k in range(8)} for prep in preps)
+    assert all(prep.state_label.startswith("|+_") for prep in preps)
+
+
+def test_return_metadata_includes_bfk_preparations_and_measurements():
+    pat = _mk_pattern([_m(1, "XY", 0.5, set(), set())])
+
+    _, metadata = encode_pattern(
+        pat,
+        theta_lookup={1: 0.75},
+        rng=np.random.default_rng(7),
+        return_metadata=True,
+    )
+
+    assert set(metadata) == {"preparations", "measurements"}
+    assert metadata["preparations"][0]["node"] == 1
+    assert metadata["preparations"][0]["theta"] == 0.75
+    assert metadata["measurements"][0]["preparation"]["theta"] == 0.75

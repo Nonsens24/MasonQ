@@ -53,9 +53,18 @@ Do not switch the default without comparing:
 - final brickwork depth,
 - failure/fallback rate at Qiskit optimisation levels 1 and 3.
 
-The important invariant is semantic equivalence, not exact gate count. Gate
-count and brickwork depth should be treated as benchmarking outputs, not as
-part of the package API.
+The primary optimization target for MasonQ's own scheduler is **minimal graph
+depth**. In this package, graph depth is the number of graph columns:
+
+```text
+graph_depth = 4 * brick_columns + 1
+```
+
+Qiskit is responsible for producing an equivalent decomposed circuit in the
+`rz`/`rx`/`cx`/`id` basis. MasonQ should then schedule that decomposed circuit
+into the shallowest brickwork graph it can without changing circuit semantics.
+Gate count and Qiskit circuit depth are useful diagnostics, but they are not
+the core objective.
 
 Explicit ancillas are allocated only when the chosen decomposition needs them:
 plain HLS multi-controlled X gates get no package-added ancilla operands,
@@ -78,6 +87,30 @@ verification = result.verify()
 
 This keeps large conversions usable without accidentally triggering
 exponential statevector work.
+
+## Stage Returns
+
+Scientists often need resource data without paying for Graphix pattern
+materialization. Use `return_stage` to stop the pipeline early:
+
+```python
+decomposed_qc = transpile(qc, return_stage="decomposed_circuit")
+matrix = transpile(qc, return_stage="matrix")
+sparse_matrix = transpile(qc, return_stage="sparse_matrix")
+resources = transpile(qc, return_stage="resources")
+graph_data = transpile(qc, return_stage="graph_data")
+nx_graph = transpile(qc, return_stage="networkx_graph")
+```
+
+`return_mat=True` remains as a compatibility alias for
+`return_stage="matrix"`.
+
+`return_stage="sparse_matrix"` returns `SparseInstructionMatrix`, which stores
+only non-empty aligned brick cells while preserving the dense matrix shape. This
+is the preferred inspection format for large, sparse circuits.
+
+`resources.graph_depth` is the graph-depth objective. `resources.brick_columns`
+is the same depth measured in brick columns before expansion to graph columns.
 
 ## Test Layers
 

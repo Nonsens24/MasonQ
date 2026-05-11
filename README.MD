@@ -75,12 +75,15 @@ from qiskit.quantum_info import Statevector
 
 from brickwork_transpiler import transpile
 
+# Define a Qiskit circuit.
 qc = QuantumCircuit(2)
 qc.h(0)
 qc.cx(0, 1)
 
+# Input states of |+> are assumed for UBQC but not necessary
 input_state = Statevector.from_label("++")
 
+# Transpile the circuit to a brickwork MBQC representation.
 result = transpile(
     qc,
     input_state,
@@ -90,10 +93,17 @@ result = transpile(
     return_result=True,
 )
 
-result.plot(save_path="images/graphs/quickstart.pdf", show=False)
+# Plot the generated brickwork graph.
+result.plot(save_path="images/graphs/quickstart.png", show=True)
+
+# Verify equivalence by simulating both the original circuit and the graph.
+# Multiple simulation options are supported; see the documentation for details.
 verification = result.verify()
-print(result.resources)
-print(verification.equivalent, verification.fidelity)
+
+# Print resource and verification information.
+print("Resources:", result.resources)
+print("Circuit output and graph simulation are equivalent:", verification.equivalent)
+print("Fidelity:", verification.fidelity)
 ```
 
 `transpile(...)` does not simulate automatically. It constructs and validates

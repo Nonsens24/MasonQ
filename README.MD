@@ -2,6 +2,16 @@
 [//]: # (![Logo]&#40;images/masonQ_nobg.png&#41;)
 ![Logo](images/MasonQ_horizontal_true_transparent.png)
 
+[![Build](https://img.shields.io/github/actions/workflow/status/Nonsens24/brickwork_transpiler/ci.yml?branch=main)](https://github.com/Nonsens24/brickwork_transpiler/actions)
+[![codecov](https://codecov.io/gh/Nonsens24/brickwork_transpiler/branch/main/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/brickwork_transpiler)
+[![PyPI](https://img.shields.io/badge/pypi-not_released-lightgrey.svg)](#)
+[![Python](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](#)
+[![Docs](https://img.shields.io/badge/docs-local-blue.svg)](docs/README.md)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://black.readthedocs.io/)
+[![mypy](https://img.shields.io/badge/mypy-checked-informational)](http://mypy-lang.org/)
+[![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://docs.pytest.org/)
+
 MasonQ is a layout-aware transpiler from unitary Qiskit circuits to brickwork
 measurement-based quantum computation patterns. It lowers circuits to a
 brickwork-compatible `rz`/`rx`/`cx` basis, schedules them onto a brickwork
@@ -166,7 +176,51 @@ For manual checks, compare `result.simulate_statevector()` with
 `result.qiskit_reference_statevector()`. Both are returned in Graphix output
 order.
 
-## Resource-Only And Stage Returns
+## Current Public Pipeline
+
+New code should call `transpile(..., return_result=True)` and work with the
+structured `TranspileResult` object:
+
+```python
+from brickwork_transpiler import transpile
+
+result = transpile(
+    qc,
+    input_state,
+    routing_method="sabre",
+    layout_method="trivial",
+    with_ancillas=True,
+    opt=3,
+    fallback_opt=1,
+    multi_control_strategy="hls",
+    return_result=True,
+)
+
+pattern = result.pattern
+decomposed_qc = result.decomposed_circuit
+resources = result.resources
+```
+
+The public object exposes the normal workflow:
+
+- `result.pattern`: the Graphix brickwork pattern;
+- `result.decomposed_circuit`: the Qiskit circuit after decomposition, layout,
+  and routing into MasonQ's supported basis;
+- `result.resources`: rows, brick columns, graph depth, graph nodes, and
+  decomposed circuit metrics;
+- `result.plot(...)`: safe plotting wrapper;
+- `result.simulate_statevector(...)`: explicit Graphix simulation;
+- `result.qiskit_reference_statevector(...)`: layout-aware Qiskit reference in
+  Graphix output order;
+- `result.output_permutation()`: Qiskit-output to Graphix-output qubit order;
+- `result.verify(...)`: explicit Graphix/Qiskit statevector check;
+- `result.save_pattern_text(...)`: write the Graphix pattern representation.
+
+`transpile(...)` itself constructs, validates, and returns data. It does not
+simulate unless you explicitly call `result.simulate_statevector()` or
+`result.verify()`.
+
+## Intermediate Stage Returns
 
 For large sweeps you often do not need a full Graphix pattern. Use
 `return_stage` to stop early:
@@ -178,40 +232,13 @@ sparse_matrix = transpile(qc, return_stage="sparse_matrix")
 decomposed_qc = transpile(qc, return_stage="decomposed_circuit")
 ```
 
-## BFK Encoding Metadata
-
-For blind-computation experiments, use the BFK helpers after constructing a
-brickwork pattern:
-
-```python
-from brickwork_transpiler import encode_pattern
-
-encoded_pattern, alice_log = encode_pattern(
-    result.pattern,
-    return_metadata=True,
-)
-
-preparations = alice_log["preparations"]
-measurements = alice_log["measurements"]
-```
-
-`preparations` records Alice's Protocol-1 qubit encodings
-`|+_theta>`, with `theta` sampled from `{0, 1/4, ..., 7/4}` in units of pi.
-`measurements` records Bob's blinded angles
-`delta = phi' + theta + r (mod 2)` and the outcome flip bit `r`.
-
-By default supplied `theta_lookup` values are checked against the pi/4 grid.
-Use `quantum_outputs=True` when modelling Protocol 3 quantum outputs, where
-output qubits are sent as `|+>`.
-
 The main scheduler objective is minimal graph depth:
 
 ```text
 graph_depth = 4 * brick_columns + 1
 ```
 
-`resources.graph_depth` reports this objective directly. `return_mat=True` is
-still supported and is equivalent to `return_stage="matrix"`.
+`resources.graph_depth` reports this objective directly.
 
 Use `return_stage="sparse_matrix"` when you want the aligned brick instruction
 matrix without storing every empty row/column cell. The sparse object keeps the
@@ -240,10 +267,15 @@ For timing comparisons while developing the scheduler:
 python benchmarks/benchmark_graph_depth.py
 ```
 
-## Public Pipeline
+## Legacy Compatibility
+
+These interfaces are still supported so old notebooks and experiments keep
+running, but they are not the recommended API for new code.
+
+The historical default return is tuple-unpackable:
 
 ```python
-bw_pattern, col_map, decomposed_qc = brickwork_transpiler.transpile(
+pattern, colour_map, decomposed_qc = transpile(
     qc,
     input_vector=None,
     routing_method="sabre",
@@ -255,15 +287,25 @@ bw_pattern, col_map, decomposed_qc = brickwork_transpiler.transpile(
 )
 ```
 
-For new code, prefer `return_result=True`. `TranspileResult` exposes:
+Prefer this instead:
 
-- `result.pattern`
-- `result.decomposed_circuit`
-- `result.resources`
-- `result.plot(...)`
-- `result.simulate_statevector(...)`
-- `result.verify(...)`
-- `result.save_pattern_text(...)`
+```python
+result = transpile(qc, input_vector, return_result=True)
+pattern = result.pattern
+colour_map = result.colour_map
+decomposed_qc = result.decomposed_circuit
+```
+
+Legacy names and flags:
+
+- `return_mat=True` is equivalent to `return_stage="matrix"`;
+- `return_stage="instruction_matrix"` is an alias for `return_stage="matrix"`;
+- `result.transpiled_circuit` remains as an alias for
+  `result.decomposed_circuit`, but new code should use
+  `decomposed_circuit` because the circuit has been decomposed/routed, not
+  converted into the final brickwork pattern.
+
+## Decomposition Policy
 
 `multi_control_strategy="hls"` uses Qiskit's current high-level synthesis path
 for multi-controlled gates. For reproducing older experiments, use
@@ -275,6 +317,32 @@ ancilla for plain HLS MCX, one phase workspace for multi-controlled phase
 rewrites, and one extra scratch qubit only for legacy recursive controls >= 5.
 The CX brick scheduler is regression-tested so aligned brick width grows
 linearly with the number of CX groups.
+
+## BFK Encoding Metadata
+
+For blind-computation experiments, use the BFK helpers after constructing a
+brickwork pattern:
+
+```python
+from brickwork_transpiler import encode_pattern
+
+encoded_pattern, alice_log = encode_pattern(
+    result.pattern,
+    return_metadata=True,
+)
+
+preparations = alice_log["preparations"]
+measurements = alice_log["measurements"]
+```
+
+`preparations` records Alice's Protocol-1 qubit encodings
+`|+_theta>`, with `theta` sampled from `{0, 1/4, ..., 7/4}` in units of pi.
+`measurements` records Bob's blinded angles
+`delta = phi' + theta + r (mod 2)` and the outcome flip bit `r`.
+
+By default supplied `theta_lookup` values are checked against the pi/4 grid.
+Use `quantum_outputs=True` when modelling Protocol 3 quantum outputs, where
+output qubits are sent as `|+>`.
 
 ## Development
 

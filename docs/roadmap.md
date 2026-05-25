@@ -8,6 +8,10 @@ This page keeps the product direction short and readable.
   Scan a user algorithm, use ML-assisted pattern detection at least in part,
   suggest a few privacy levels, identify candidate blind regions, and explain
   likely value and cost tradeoffs in a way that is easy for non-experts to use.
+- Gate and circuit approximation guidance.
+  Detect hard-to-decompose regions during the scan and suggest Solovay-Kitaev
+  style epsilon-approximation options where that improves usability or compile
+  practicality.
 - Better delegated-execution packaging, verification flows, and clearer trust
   reporting.
 - Clearer QHE mode options and guidance for when to use `off`, QOTP-style

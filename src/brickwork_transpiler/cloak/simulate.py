@@ -35,9 +35,18 @@ from .rsp import RSPClient
 def assemble_honest_circuit(job: CloakedJob) -> QuantumCircuit:
     """Reconstruct the equivalent plaintext circuit from a cloak job.
 
-    The output uses each sub's *decomposed* circuit (in the rz/rx/cx/id
-    brickwork basis) rather than its original definition.  This matches
-    what an honest server's brickwork-pattern execution would produce.
+    The output uses each sub's **original** (pre-MasonQ-decomposition)
+    body, so the result is semantically equivalent to the user's
+    annotated input circuit — exactly what we want when checking that
+    the cloak pipeline preserves meaning.
+
+    The MasonQ-decomposed equivalent is also available via
+    ``job.subs[i].decomposed_circuit`` for callers that need to see
+    how the sub is actually scheduled on the brickwork; we just don't
+    use it here because the decomposed basis (rz/rx/cx/id, possibly
+    with ancillas) can drift slightly from the original under
+    floating-point arithmetic, which would defeat the "semantic
+    roundtrip" purpose of this helper.
     """
     outer = job.outer_qhe_circuit
     out = QuantumCircuit(outer.num_qubits, outer.num_clbits, name=f"{outer.name}_honest")
@@ -51,8 +60,8 @@ def assemble_honest_circuit(job: CloakedJob) -> QuantumCircuit:
             slice_id = int(label.removeprefix("cloak_sub_"))
             sub = sub_by_id[slice_id]
             target_qubits = list(instr.qubits)
-            # Map sub-local 0..n-1 onto the global qubits the barrier names.
-            out.compose(sub.decomposed_circuit, qubits=target_qubits, inplace=True)
+            body = sub.original_body if sub.original_body is not None else sub.decomposed_circuit
+            out.compose(body, qubits=target_qubits, inplace=True)
         else:
             out.append(op, list(instr.qubits), list(instr.clbits))
     return out

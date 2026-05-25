@@ -5,7 +5,7 @@
 MasonQ now targets the current Qiskit 2.x packaging model:
 
 ```bash
-pip install masonq
+python -m pip install -e .
 ```
 
 Core targets:

@@ -1,39 +1,24 @@
-# Scientist Guide
+# Scientist And User Guide
 
-This guide is the practical reference for using MasonQ in notebooks, scripts,
-and benchmark studies. The README gives the short public entry point; this page
-collects the knobs scientists are most likely to vary.
+This is the main practical guide for using MasonQ in notebooks, scripts, and
+evaluation workflows.
 
-## Install And Check Versions
+## Installation
 
-```bash
-pip install masonq
-```
-
-For local development from a checkout:
+### Recommended repository workflow
 
 ```bash
+conda env create -f environment.yml
+conda activate masonq-qiskit24
 python -m pip install -e ".[dev]"
 ```
 
-For optional IBM cloud/backend access in your own scripts:
+If you are using your own Conda environment name, install the same project into
+that environment and make sure your IDE points at the matching interpreter.
 
-```bash
-python -m pip install "masonq[ibm]"
-```
+## Recommended Workflows
 
-MasonQ itself does not use IBM Runtime for transpilation, Graphix simulation,
-or local Qiskit reference checks.
-
-Record versions in notebooks and benchmark logs:
-
-```python
-import brickwork_transpiler as bwt
-
-bwt.show_versions()
-```
-
-## Recommended Workflow
+### Brickwork transpilation
 
 ```python
 from qiskit import QuantumCircuit
@@ -45,42 +30,52 @@ qc = QuantumCircuit(2)
 qc.h(0)
 qc.cx(0, 1)
 
-input_state = Statevector.from_label("++")
-
 result = transpile(
     qc,
-    input_state,
+    Statevector.from_label("00"),
     layout_method="trivial",
     routing_method="sabre",
     return_result=True,
-    progress=True,
 )
 
+print(result.resources)
 pattern = result.pattern
-decomposed_qc = result.decomposed_circuit
-resources = result.resources
 ```
 
-The Graphix object is `result.pattern`. The Qiskit-side lowered circuit is
-`result.decomposed_circuit`. The latter is useful for diagnostics, but it is
-not the final MBQC object.
+Use `return_result=True` for normal work. The result object gives you the
+pattern, decomposed circuit, resource estimates, simulation helpers, and
+verification helpers in one place.
 
-`transpile(...)` does not simulate automatically. Use simulation only when you
-ask for it:
+### Selective cloaking
 
 ```python
-state = result.simulate_statevector(progress=True)
-verification = result.verify(tolerance=1e-8, progress=True)
+from qiskit import QuantumCircuit
+
+from brickwork_transpiler.cloak import sensitive, cloak_compile, simulate_cloaked
+
+qc = QuantumCircuit(3)
+qc.h([0, 1, 2])
+
+with sensitive(qc, [0, 1, 2], label="oracle") as oracle:
+    oracle.cx(0, 1)
+    oracle.x(2)
+
+qc.h([0, 1, 2])
+
+state = simulate_cloaked(qc, seed=0)
+job = cloak_compile(qc, rounds=3, seed=0)
+
+print(job.metadata["blind_share"].format())
 ```
 
-Progress messages are off by default so library calls stay quiet in automated
-workflows. Pass `progress=True` when running expensive notebook or terminal
-jobs. You can also pass a callback, for example `progress=messages.append`, to
-collect the same messages without printing them.
+Use cloaking when the sensitive region is compact and the surrounding algorithm
+can remain public.
 
-## Transpilation Options
+## Core API Surface
 
-The public function is:
+### Transpiler
+
+The main entry point is:
 
 ```python
 result = transpile(
@@ -97,150 +92,66 @@ result = transpile(
 )
 ```
 
-Core options:
+Most important options:
 
-- `input_vector`: input state used later by `result.verify()` and
-  `result.qiskit_reference_statevector()`.
-- `layout_method`: passed to Qiskit's `transpile(...)`; common choices include
-  `None`, `"trivial"`, `"dense"`, and `"sabre"`.
-- `routing_method`: passed to Qiskit's `transpile(...)`; common choices include
-  `None`, `"basic"`, `"lookahead"`, `"stochastic"`, and `"sabre"`.
-- `with_ancillas`: allows MasonQ's pre-decomposition step to add explicit
-  ancillas only when its selected decomposition requires them.
-- `opt`: Qiskit optimization level, usually `3` for the best single-qubit
-  merging or `1` for more robust large-circuit runs.
-- `fallback_opt`: retry optimization level if the first Qiskit transpilation
-  fails; set to `None` to fail immediately.
-- `multi_control_strategy`: `"hls"` for the current default, or
-  `"legacy-recursive"` for older experiment reproduction.
-- `validate`: run structural validation of the matrix, graph, and pattern
-  outputs.
+- `input_vector`
+  Used by verification and reference-state helpers.
+- `layout_method`
+  Forwarded to Qiskit. Common choices are `None`, `"trivial"`, `"dense"`, and
+  `"sabre"`.
+- `routing_method`
+  Forwarded to Qiskit. Common choices are `None`, `"basic"`, `"lookahead"`,
+  `"stochastic"`, and `"sabre"`.
+- `with_ancillas`
+  Allows package-added ancillas only when the chosen decomposition needs them.
+- `opt`
+  Qiskit optimisation level.
+- `fallback_opt`
+  Retry optimisation level if the first pass fails.
+- `multi_control_strategy`
+  Use `"hls"` for current work and `"legacy-recursive"` only for historical
+  reproduction.
+- `validate`
+  Runs structural checks on the generated output.
 
-Less common compatibility/debug options:
+## Result Objects
 
-- `plot_decomposed=True`: draw the lowered Qiskit circuit.
-- `verbose=True`: enable MasonQ logging.
-- `file_writer`: legacy experiment hook for recording metrics.
-- `return_mat=True`: legacy alias for `return_stage="matrix"`.
-- `progress=True`: print concise timed progress messages for long-running
-  stages, or pass a callback such as `progress=messages.append`.
+### `TranspileResult`
 
-## Layout And Routing
+Important attributes and helpers:
 
-MasonQ asks Qiskit to lower the circuit to a line coupling map before brickwork
-scheduling. Layout and routing choices therefore affect the decomposed circuit,
-CX count, brick columns, graph depth, and output permutation.
+- `pattern`
+- `decomposed_circuit`
+- `instruction_matrix`
+- `resources`
+- `plot(...)`
+- `simulate(...)`
+- `simulate_statevector(...)`
+- `qiskit_reference_statevector(...)`
+- `output_permutation()`
+- `verify(...)`
+- `save_pattern_text(...)`
 
-Good starting points:
-
-```python
-# Deterministic debugging.
-debug_result = transpile(
-    qc,
-    input_state,
-    layout_method="trivial",
-    routing_method="sabre",
-    return_result=True,
-)
-
-# More realistic routing/layout study.
-sabre_result = transpile(
-    qc,
-    input_state,
-    layout_method="sabre",
-    routing_method="sabre",
-    return_result=True,
-)
-
-# Let Qiskit choose defaults for the given version.
-default_result = transpile(qc, input_state, return_result=True)
-```
-
-Other Qiskit layout and routing plugin names may be accepted by your installed
-Qiskit version. MasonQ forwards these strings to Qiskit rather than
-reimplementing them.
-
-For nontrivial layout, use MasonQ's layout-aware reference helpers:
+Use explicit simulation only when you need it:
 
 ```python
-brickwork_state = result.simulate_statevector()
-reference_state = result.qiskit_reference_statevector()
-permutation = result.output_permutation()
+state = result.simulate_statevector(progress=True)
+verification = result.verify(tolerance=1e-8, progress=True)
 ```
 
-Both `brickwork_state` and `reference_state` are returned in Graphix output
-order. `output_permutation()` tells you how the decomposed Qiskit output order
-was permuted to match Graphix.
+`transpile(...)` does not simulate automatically.
 
-## Decomposition Methods
+### `CloakedJob`
 
-The default is:
+`cloak_compile(...)` returns a job object that includes the public outer circuit,
+the blinded subcircuits, RSP preparation plan, QOTP tracking metadata, boundary
+classification, and blind-share reporting.
 
-```python
-transpile(qc, multi_control_strategy="hls")
-```
+This is the right object to hand off to a delegated execution layer.
 
-This keeps multi-controlled X gates semantic and lets Qiskit's high-level
-synthesis choose their implementation during basis lowering. Use this path for
-new studies unless you have a specific reason not to.
+## Return Stages For Diagnostics
 
-For reproducing older runs:
-
-```python
-transpile(qc, multi_control_strategy="legacy-recursive")
-```
-
-The implemented ancilla policy is demand-driven:
-
-- HLS MCX operations get no package-added ancilla operands.
-- Multi-controlled phase rewrites get one phase workspace qubit.
-- Legacy recursive MCX uses one clean scratch qubit only for controls `>= 5`.
-
-See [HLS decomposition](hls_decomposition.md) for the detailed policy and
-Qiskit references.
-
-When comparing decomposition strategies, record at least:
-
-- semantic equivalence on small circuits;
-- number of qubits and package-added ancillas;
-- decomposed `cx` count and Qiskit depth;
-- `resources.brick_columns`, `resources.graph_depth`, and
-  `resources.graph_nodes`;
-- Qiskit `opt`, `fallback_opt`, layout, and routing methods.
-
-MasonQ's scheduling objective is minimal graph depth:
-
-```text
-graph_depth = 4 * brick_columns + 1
-```
-
-The CX brick alignment pass is expected to scale linearly in the number of CX
-groups after Qiskit decomposition.
-
-## Return Types
-
-Use `return_result=True` for normal work:
-
-```python
-result = transpile(qc, input_state, return_result=True)
-```
-
-`TranspileResult` exposes:
-
-- `pattern`: Graphix brickwork pattern.
-- `colour_map` / `color_map`: node-colour metadata for plotting.
-- `decomposed_circuit`: lowered Qiskit circuit.
-- `instruction_matrix`: dense aligned brick instruction matrix.
-- `resources`: resource estimate computed from the matrix and circuit.
-- `plot(...)`: safe plotting wrapper.
-- `simulate(...)`: Graphix backend state object.
-- `simulate_statevector(...)`: flat Graphix output statevector.
-- `qiskit_reference_statevector(...)`: reference state in Graphix output order.
-- `output_permutation()`: Qiskit-output to Graphix-output order.
-- `verify(...)`: explicit Graphix/Qiskit comparison.
-- `save_pattern_text(...)`: write Graphix's text pattern representation.
-
-Use `return_stage` for sweeps and diagnostics:
+When you do not need the full result object, use `return_stage`:
 
 ```python
 decomposed_qc = transpile(qc, return_stage="decomposed_circuit")
@@ -251,161 +162,65 @@ graph_data = transpile(qc, return_stage="graph_data")
 nx_graph = transpile(qc, return_stage="networkx_graph")
 ```
 
-`return_stage="instruction_matrix"` is an alias for `"matrix"`.
-`return_mat=True` is kept only for old notebooks and is equivalent to
-`return_stage="matrix"`.
+Use `return_stage="resources"` for large sweeps that only need estimates. Use
+`return_stage="sparse_matrix"` when you want a compact view of aligned work.
 
-The historical tuple return still works:
+## Layout And Routing Guidance
 
-```python
-pattern, colour_map, decomposed_qc = transpile(qc, input_state)
-```
+MasonQ delegates basis-lowering and routing to Qiskit before brickwork
+scheduling. Layout and routing choices therefore affect CX count, brick columns,
+graph depth, and output permutation.
 
-New code should prefer `return_result=True`.
-
-## Resource Sweeps
-
-For large circuits, avoid building or simulating the full pattern unless you
-need it:
+Good defaults:
 
 ```python
-resources = transpile(qc, return_stage="resources")
-
-print(resources.rows)
-print(resources.brick_columns)
-print(resources.graph_depth)
-print(resources.graph_nodes)
-print(resources.decomposed_depth)
-print(resources.decomposed_cx_count)
-```
-
-Use the sparse matrix when the dense instruction matrix would mostly contain
-empty cells:
-
-```python
-sparse = transpile(qc, return_stage="sparse_matrix")
-
-print(sparse.shape)
-print(sparse.non_empty_cells)
-print(sparse.occupancy)
-
-for row, column, instructions in sparse.iter_non_empty():
-    print(row, column, [instruction.name for instruction in instructions])
-```
-
-Convert back only when a legacy tool expects the dense format:
-
-```python
-dense = sparse.to_dense()
-```
-
-See [Sparse instruction matrix](sparse_matrix.md) for the complete API.
-
-## Correctness Checks
-
-For small circuits:
-
-```python
-verification = result.verify(tolerance=1e-8, backend="tensornetwork")
-verification.raise_for_failure()
-```
-
-`verify()` simulates the Graphix pattern, computes the Qiskit reference from
-the source circuit and `result.decomposed_circuit`, then compares both states in
-Graphix output order.
-
-For manual checks:
-
-```python
-brickwork_state = result.simulate_statevector(seed=0)
-qiskit_reference = result.qiskit_reference_statevector()
-permutation = result.output_permutation()
-
-print(permutation)
-```
-
-For larger circuits, full statevector simulation is usually the wrong default.
-Use structural validation and resource estimates, then verify only small
-representative cases.
-
-## Plotting
-
-For notebooks and IDEs, prefer saving large graphs:
-
-```python
-result.plot(save_path="images/graphs/my_circuit.pdf", show=False)
-```
-
-Use `show=True` for small interactive plots.
-
-## Noisy Simulation
-
-For incoherent-noise studies use `simulate_with_noise`:
-
-```python
-from brickwork_transpiler import (
-    DepolarisingNoiseModel,
-    simulate_with_noise,
-    density_matrix,
-    state_fidelity,
+debug_result = transpile(
+    qc,
+    input_vector,
+    layout_method="trivial",
+    routing_method="sabre",
+    return_result=True,
 )
 
-noise = DepolarisingNoiseModel(
-    prepare_error_prob=0.01,
-    entanglement_error_prob=0.02,
-    measure_channel_prob=0.01,
+study_result = transpile(
+    qc,
+    input_vector,
+    layout_method="sabre",
+    routing_method="sabre",
+    return_result=True,
 )
-state = simulate_with_noise(result.pattern, noise, seed=0)
-
-rho = density_matrix(state)                          # numpy ndarray, trace 1
-fidelity = state_fidelity(state, qiskit_reference)   # in [0, 1]
 ```
 
-Graphix's `densitymatrix` backend is the **only** backend that implements
-`apply_noise`; `tensornetwork` and `statevector` raise
-`NoiseNotSupportedError`. `simulate_with_noise` therefore always uses the
-density-matrix backend.
+For nontrivial layout, compare against MasonQ's layout-aware reference helpers
+rather than a naive Qiskit statevector.
 
-`standardize` and `shift_signals` default to `False` here (the opposite of
-the noiseless path) so that measurements stay interleaved with
-preparations. This keeps the density matrix small enough to simulate
-moderate brickwork patterns in seconds rather than blowing up to
-`2^(graph nodes)`.
+## Progress And Long Runs
 
-## BFK Experiment Metadata
-
-For blind-computation experiments:
+Library calls stay quiet by default. For notebook or terminal jobs, use:
 
 ```python
-from brickwork_transpiler import encode_pattern
-
-encoded_pattern, alice_log = encode_pattern(
-    result.pattern,
-    return_metadata=True,
-)
-
-preparations = alice_log["preparations"]
-measurements = alice_log["measurements"]
+result = transpile(qc, return_result=True, progress=True)
 ```
 
-The BFK encoder follows Protocol 1 of Broadbent-Fitzsimons-Kashefi: Alice
-prepares graph qubits as `|+_theta>`, with `theta` sampled from the eight
-pi/4 angles, and sends Bob blinded measurement angles
-`delta = phi' + theta + r (mod 2)`.
+You may also pass a callback such as `progress=messages.append`.
 
-Supplied `theta_lookup` values are validated against the pi/4 grid by default.
-Set `quantum_outputs=True` for Protocol 3-style quantum-output experiments,
-where output qubits are prepared as `|+>`.
+## Example Entry Points
 
-## What To Report In A Paper
+From the repository root:
 
-For reproducibility, report:
+```bash
+PYTHONPATH=src python examples/cloak/01_finance_qaoa.py
+PYTHONPATH=src python examples/cloak/03_defence_logistics.py
+```
 
-- MasonQ version and `show_versions()` output;
-- source circuit construction and input state;
-- `layout_method`, `routing_method`, `opt`, and `fallback_opt`;
-- `multi_control_strategy` and whether `with_ancillas` was enabled;
-- decomposed qubit count, `cx` count, and Qiskit depth;
-- brick rows, brick columns, graph depth, and graph nodes;
-- whether correctness was checked by `verify()` or by structural/resource
-  validation only.
+More example navigation is collected in:
+
+- [Cloak examples overview](../examples/cloak/README.md)
+- [Application demos](../examples/cloak/applications/README.md)
+
+## Next Reading
+
+- [Limitations](limitations.md)
+- [Sparse instruction matrix](sparse_matrix.md)
+- [Architecture](architecture.md)
+- [VEIL / cloak opportunity catalogue](veil_opportunities.md)

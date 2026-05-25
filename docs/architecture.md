@@ -1,133 +1,135 @@
 # Architecture
 
-MasonQ converts unitary Qiskit circuits into brickwork measurement patterns.
-The package has three layers:
+This page describes the implementation-level structure of MasonQ for maintainers
+and reviewers.
 
-1. Circuit preparation
-   - `decomposer.selective_decompose` opens composite gates while preserving
-     multi-controlled operations for controlled handling.
-   - `decomposer.linearise_multi_ctrl` optionally rewrites large multi-control
-     operations before Qiskit's transpiler lowers the circuit.
-   - `decomposer.decompose_qc_to_bricks_qiskit` asks Qiskit to emit the
-     brickwork-compatible basis `rz`, `rx`, `cx`, and `id` on a line coupling
-     map.
+## System Overview
 
-2. Brick scheduling
-   - `decomposer.instructions_to_matrix_dag` groups DAG-ready operations into
-     columns.
-   - `decomposer.align_cx_matrix` places CX bricks on the parity-compatible
-     brickwork columns. This pass must remain linear in the number of CX
-     groups it places; every CX contributes one two-row brick, and tests assert
-     that brick width grows linearly with CX count.
-   - `decomposer.insert_rotations_adjacent_to_cx` places single-qubit
-     rotations near their neighbouring CX bricks. The legacy alias
-     `insert_rotations_adjecant_to_cx` (with the historical typo) remains
-     supported for backwards compatibility.
+MasonQ has two connected layers:
 
-3. Pattern generation
-   - `graph_builder.generate_brickwork_graph_from_instruction_matrix` creates
-     the brickwork graph.
-   - `pattern_converter.to_pattern` injects measurement angles and calls
-     Graphix to build the MBQC pattern.
+1. The brickwork transpiler
+   Converts Qiskit circuits into aligned brickwork structures and Graphix
+   patterns.
+2. The cloak layer
+   Selectively compiles marked subcircuits into blind, verifiable brickwork
+   patches while leaving the public scaffold intact.
 
-## Qiskit Decomposition Policy
+## Transpiler Pipeline
 
-The public transpiler currently defaults to:
+### 1. Circuit preparation
 
-```python
-brickwork_transpiler.transpile(..., multi_control_strategy="hls")
-```
+- `decomposer.selective_decompose`
+  Opens composite gates while preserving multi-controlled operations for
+  specialised handling.
+- `decomposer.linearise_multi_ctrl`
+  Optionally rewrites large multi-control operations before Qiskit lowering.
+- `decomposer.decompose_qc_to_bricks_qiskit`
+  Delegates basis-lowering to Qiskit and targets the brickwork-compatible
+  `rz`/`rx`/`cx`/`id` basis on a line coupling map.
 
-That follows Qiskit's current recommendation for multi-controlled gates:
-construct the semantic `MCXGate` and let high-level synthesis choose the
-implementation. The historical recursive path remains available for
-reproducibility:
+### 2. Brick scheduling
 
-```python
-brickwork_transpiler.transpile(..., multi_control_strategy="legacy-recursive")
-```
+- `decomposer.instructions_to_matrix_dag`
+  Groups decomposed operations into DAG-aware columns.
+- `decomposer.align_cx_matrix`
+  Places CX bricks on parity-compatible brickwork columns.
+- `decomposer.insert_rotations_adjacent_to_cx`
+  Moves single-qubit rotations next to neighbouring CX bricks.
 
-Do not switch the default without comparing:
+The CX alignment pass must remain linear in the number of CX groups it places.
 
-- output state equivalence,
-- introduced ancilla count,
-- routed `cx` count,
-- final brickwork depth,
-- failure/fallback rate at Qiskit optimisation levels 1 and 3.
+### 3. Pattern generation
 
-The primary optimization target for MasonQ's own scheduler is **minimal graph
-depth**. In this package, graph depth is the number of graph columns:
+- `graph_builder.generate_brickwork_graph_from_instruction_matrix`
+  Builds the brickwork graph.
+- `pattern_converter.to_pattern`
+  Injects measurement angles and produces the Graphix pattern.
+
+## Scheduling Objective
+
+MasonQ's internal scheduling objective is minimal graph depth, not minimal
+Qiskit gate depth.
 
 ```text
 graph_depth = 4 * brick_columns + 1
 ```
 
-Qiskit is responsible for producing an equivalent decomposed circuit in the
-`rz`/`rx`/`cx`/`id` basis. MasonQ should then schedule that decomposed circuit
-into the shallowest brickwork graph it can without changing circuit semantics.
-Gate count and Qiskit circuit depth are useful diagnostics, but they are not
-the core objective.
+Gate count and decomposed circuit depth remain useful diagnostics, but the
+brickwork graph depth is the primary optimisation target.
 
-Explicit ancillas are allocated only when the chosen decomposition needs them:
-plain HLS multi-controlled X gates get no package-added ancilla operands,
-multi-controlled phase rewrites get one phase workspace qubit, and the legacy
-recursive path gets a second scratch qubit only for controls >= 5.
+## Decomposition Policy
 
-See [HLS decomposition](hls_decomposition.md) for the detailed multi-control
-policy and Qiskit references.
+The public transpiler defaults to:
+
+```python
+brickwork_transpiler.transpile(..., multi_control_strategy="hls")
+```
+
+This keeps multi-controlled operations semantic until Qiskit's high-level
+synthesis chooses an implementation.
+
+The historical path remains available for reproducibility:
+
+```python
+brickwork_transpiler.transpile(..., multi_control_strategy="legacy-recursive")
+```
+
+Do not change the default without comparing:
+
+- output equivalence;
+- ancilla count;
+- routed CX count;
+- brickwork depth;
+- failure and fallback rates under supported Qiskit versions.
+
+## Ancilla Policy
+
+Package-added ancillas are demand-driven.
+
+- HLS MCX operations receive no package-added ancilla operands.
+- Multi-controlled phase rewrites use one phase workspace qubit.
+- The legacy recursive path uses an extra scratch qubit only for controls
+  greater than or equal to 5.
+
+See [HLS decomposition](hls_decomposition.md) for the detailed policy.
 
 ## Simulation Policy
 
-`transpile(...)` does not run Graphix simulation automatically. It constructs
-the pattern, validates structural invariants, and returns a `TranspileResult`.
-Simulation is explicit:
+`transpile(...)` builds output objects and validates structure. It does not run
+simulation automatically.
 
 ```python
 state = result.simulate_statevector()
 verification = result.verify()
 ```
 
-This keeps large conversions usable without accidentally triggering
-exponential statevector work.
+This keeps large conversions usable without accidentally triggering expensive
+statevector work.
 
-Noisy simulation goes through `brickwork_transpiler.simulate_with_noise`,
-which is hard-wired to Graphix's **density-matrix backend**. That backend
-is the only one in Graphix with native `apply_noise` support;
-`tensornetwork` and `statevector` raise `NoiseNotSupportedError` on noise
-commands. `simulate_with_noise` also disables `standardize` and
-`shift_signals` by default so qubits are traced out as soon as they are
-measured, keeping peak DM dimension proportional to the pattern's local
-interaction degree rather than to the full graph node count.
+Noisy simulation goes through `brickwork_transpiler.simulate_with_noise`, which
+depends on Graphix's density-matrix backend.
 
 ## Stage Returns
 
-Scientists often need resource data without paying for Graphix pattern
-materialization. Use `return_stage` to stop the pipeline early:
+Use `return_stage` when users need intermediate products without the full result
+object:
 
 ```python
 decomposed_qc = transpile(qc, return_stage="decomposed_circuit")
 matrix = transpile(qc, return_stage="matrix")
 sparse_matrix = transpile(qc, return_stage="sparse_matrix")
 resources = transpile(qc, return_stage="resources")
-graph_data = transpile(qc, return_stage="graph_data")
-nx_graph = transpile(qc, return_stage="networkx_graph")
 ```
 
-`return_mat=True` remains as a compatibility alias for
-`return_stage="matrix"`.
+`return_stage="sparse_matrix"` is the preferred inspection format for large,
+sparse aligned matrices.
 
-`return_stage="sparse_matrix"` returns `SparseInstructionMatrix`, which stores
-only non-empty aligned brick cells while preserving the dense matrix shape. This
-is the preferred inspection format for large, sparse circuits.
+## Testing Layers
 
-`resources.graph_depth` is the graph-depth objective. `resources.brick_columns`
-is the same depth measured in brick columns before expansion to graph columns.
-
-## Test Layers
-
-Use `tests/unit_and_integration_tests` for normal development. The
-`tests/system_tests` folder contains slow Graphix/Qiskit equivalence simulations
-and is automatically marked as both `system` and `slow`.
+- `tests/unit_and_integration_tests`
+  Default development loop.
+- `tests/system_tests`
+  Slow Graphix/Qiskit equivalence checks.
 
 Recommended local loop:
 
@@ -135,5 +137,5 @@ Recommended local loop:
 pytest tests/unit_and_integration_tests -m "not slow and not system"
 ```
 
-Run system tests only before releases or when changing scheduling,
+Run system tests before releases and after changes to scheduling,
 measurement-angle generation, or reference-state logic.

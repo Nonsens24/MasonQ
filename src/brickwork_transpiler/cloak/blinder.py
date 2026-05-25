@@ -63,6 +63,10 @@ class BlindedSub:
     decomposed_circuit: QuantumCircuit
     """The MasonQ-decomposed sub-circuit; useful for resource sanity checks."""
 
+    original_body: Optional[QuantumCircuit] = None
+    """The sub's pre-decomposition body — used by `simulate_cloaked` for a
+    semantically faithful honest-server reference."""
+
     resources: Optional[ResourceEstimate] = None
     """Brickwork-graph resource estimate (rows, columns, depth, nodes)."""
 
@@ -120,6 +124,7 @@ def _blind_sub(
         rounds=rounds_list,
         output_qotp=output_qotp,
         decomposed_circuit=base_result.decomposed_circuit,
+        original_body=sub.body,
         resources=base_result.resources,
     )
 

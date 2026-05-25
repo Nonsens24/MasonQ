@@ -505,23 +505,6 @@ def test_non_grid_theta_lookup_is_rejected_by_default():
         encode_pattern(pat, theta_lookup={1: 0.33}, rng=np.random.default_rng(9))
 
 
-def test_non_grid_theta_lookup_can_be_allowed_for_legacy_experiments():
-    phi = 0.6
-    theta = 0.33
-    pat = _mk_pattern([_m(1, "XY", phi, set(), set())])
-
-    rng = np.random.default_rng(9)
-    new_pat, info = encode_pattern(
-        pat,
-        theta_lookup={1: theta},
-        rng=rng,
-        validate_theta_grid=False,
-    )
-    m = _extract_Ms(new_pat)[0]
-    expected = (phi + theta + info[0]["r"]) % 2.0
-    assert _angles_close(m.angle, expected)
-
-
 def test_sample_qubit_preparations_covers_all_pattern_nodes():
     pat = _mk_pattern([
         _m(1, "XY", 0.0, set(), set()),

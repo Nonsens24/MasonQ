@@ -5,12 +5,14 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Iterator
 
 import numpy as np
 from qiskit import QuantumCircuit
 
 from .resources import ResourceEstimate, estimate_resources
+from .progress import ProgressReporter
 from . import utils
 
 
@@ -111,6 +113,7 @@ class TranspileResult:
         rng: np.random.Generator | None = None,
         seed: int | None = 0,
         mutate: bool = False,
+        progress: bool | Callable[[str], None] = False,
         **kwargs: Any,
     ):
         """Simulate the Graphix pattern and return the backend state object.
@@ -118,18 +121,30 @@ class TranspileResult:
         By default this works on a copy of the pattern, so repeated calls are
         safe in notebooks. Pass `mutate=True` to run on the stored pattern.
         """
-        pattern = self.pattern if mutate else self.copy_pattern()
-        if standardize:
-            pattern.standardize()
-        if shift_signals:
-            pattern.shift_signals()
+        reporter = ProgressReporter(progress)
+        resources = self.resources
+        if resources is not None:
+            reporter.emit(
+                "Preparing Graphix simulation: "
+                f"{resources.graph_nodes} graph nodes, backend={backend!r}."
+            )
+        else:
+            reporter.emit(f"Preparing Graphix simulation: backend={backend!r}.")
+
+        with reporter.step("Preparing pattern copy.", "Pattern preparation complete"):
+            pattern = self.pattern if mutate else self.copy_pattern()
+            if standardize:
+                pattern.standardize()
+            if shift_signals:
+                pattern.shift_signals()
         if rng is None and seed is not None:
             rng = np.random.default_rng(seed)
 
         simulate_kwargs = dict(kwargs)
         if backend in {"tensornetwork", "mps"}:
             simulate_kwargs.setdefault("graph_prep", graph_prep)
-        return pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
+        with reporter.step("Running Graphix pattern simulation.", "Graphix simulation complete"):
+            return pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
 
     def simulate_statevector(self, **kwargs: Any) -> np.ndarray:
         """Simulate the Graphix pattern and return its flat output statevector."""
@@ -177,6 +192,7 @@ class TranspileResult:
         *,
         tolerance: float = 1e-6,
         raise_on_failure: bool = False,
+        progress: bool | Callable[[str], None] = False,
         **simulate_kwargs: Any,
     ) -> VerificationResult:
         """Compare Graphix simulation against Qiskit's statevector result."""
@@ -187,11 +203,26 @@ class TranspileResult:
         if state is None:
             raise ValueError("verify() needs an input state.")
 
-        pattern = self.pattern if simulate_kwargs.pop("mutate", False) else self.copy_pattern()
-        if simulate_kwargs.pop("standardize", True):
-            pattern.standardize()
-        if simulate_kwargs.pop("shift_signals", True):
-            pattern.shift_signals()
+        reporter = ProgressReporter(progress)
+        resources = self.resources
+        if resources is not None:
+            reporter.emit(
+                "Starting verification: "
+                f"{resources.graph_nodes} graph nodes, "
+                f"{self.decomposed_circuit.num_qubits} output qubits."
+            )
+        else:
+            reporter.emit("Starting verification.")
+
+        with reporter.step(
+            "Preparing pattern for Graphix simulation.",
+            "Pattern preparation complete",
+        ):
+            pattern = self.pattern if simulate_kwargs.pop("mutate", False) else self.copy_pattern()
+            if simulate_kwargs.pop("standardize", True):
+                pattern.standardize()
+            if simulate_kwargs.pop("shift_signals", True):
+                pattern.shift_signals()
 
         seed = simulate_kwargs.pop("seed", 0)
         rng = simulate_kwargs.pop("rng", None)
@@ -200,7 +231,8 @@ class TranspileResult:
         backend = simulate_kwargs.pop("backend", "tensornetwork")
         if backend in {"tensornetwork", "mps"}:
             simulate_kwargs.setdefault("graph_prep", "parallel")
-        simulated_obj = pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
+        with reporter.step("Running Graphix pattern simulation.", "Graphix simulation complete"):
+            simulated_obj = pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
         if hasattr(simulated_obj, "to_statevector"):
             simulated = np.asarray(simulated_obj.to_statevector(), dtype=complex)
         elif hasattr(simulated_obj, "flatten"):
@@ -208,18 +240,23 @@ class TranspileResult:
         else:
             simulated = np.asarray(simulated_obj, dtype=complex).reshape(-1)
 
-        reference = self.qiskit_reference_statevector(input_state=state, source_circuit=circuit)
-        reference_norm = np.linalg.norm(reference)
-        simulated_norm = np.linalg.norm(simulated)
-        if np.isclose(reference_norm, 0.0, atol=tolerance) or np.isclose(
-            simulated_norm, 0.0, atol=tolerance
+        with reporter.step("Computing layout-aware Qiskit reference.", "Qiskit reference complete"):
+            reference = self.qiskit_reference_statevector(input_state=state, source_circuit=circuit)
+        with reporter.step(
+            "Comparing statevectors up to global phase.",
+            "Statevector comparison complete",
         ):
-            raise AssertionError("One of the states has zero norm.")
+            reference_norm = np.linalg.norm(reference)
+            simulated_norm = np.linalg.norm(simulated)
+            if np.isclose(reference_norm, 0.0, atol=tolerance) or np.isclose(
+                simulated_norm, 0.0, atol=tolerance
+            ):
+                raise AssertionError("One of the states has zero norm.")
 
-        reference_unit = reference / reference_norm
-        simulated_unit = simulated / simulated_norm
-        inner_product = np.vdot(reference_unit, simulated_unit)
-        fidelity = float(np.abs(inner_product))
+            reference_unit = reference / reference_norm
+            simulated_unit = simulated / simulated_norm
+            inner_product = np.vdot(reference_unit, simulated_unit)
+            fidelity = float(np.abs(inner_product))
         result = VerificationResult(
             equivalent=bool(np.isclose(fidelity, 1.0, atol=tolerance, rtol=0.0)),
             fidelity=fidelity,
@@ -227,6 +264,10 @@ class TranspileResult:
             tolerance=tolerance,
             reference_state=reference,
             simulated_state=simulated,
+        )
+        reporter.emit(
+            "Verification complete: "
+            f"equivalent={result.equivalent}, fidelity={result.fidelity:.12g}."
         )
         if raise_on_failure:
             result.raise_for_failure()

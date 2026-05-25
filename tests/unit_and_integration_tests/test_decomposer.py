@@ -421,59 +421,56 @@ class TestAlignCXMatrix(unittest.TestCase):
         assert aligned_cx_mat == [[], []]
 
     def test_already_aligned_cx(self):
-        # two rows, one cx0 brick already at col 1 (parity matches)
-        cx0 = DummyInstr("cx0_")
+        # Two rows, one cx0 brick already at col 1 (top=0 even, col=1 odd ->
+        # parity mismatch). The brick is shifted to col 2 to fix parity.
+        # Use the tagged endpoint names produced by `instructions_to_matrix_dag`
+        # (`cx0c` for control, `cx0t` for target).
         mat = [
-            [[], [cx0]],  # row 0, col 1: top=0, col=1, 0%2==1%2? False → would shift
-            [[], [cx0]],  # row 1
+            [[], [DummyInstr("cx0c")]],  # row 0 control, top=0
+            [[], [DummyInstr("cx0t")]],  # row 1 target
         ]
-        # Actually since 0%2 != 1%2, it *should* shift right to col 2
         out = align_cx_matrix(mat)
 
-        # visualiser.print_matrix(out)
-        # expect a new column appended and both bricks moved
         assert len(out[0]) == 3
         assert out[0][1] == []
-        self.assertEqual(out[0][2][0].name, cx0.name)
-        self.assertEqual(out[1][2][0].name, cx0.name)
+        self.assertEqual(out[0][2][0].name, "cx0c")
+        self.assertEqual(out[1][2][0].name, "cx0t")
 
     def test_shift_cx_into_next_column(self):
-        # top row index=1, col=0 → shift
-        cx1 = DummyInstr("cx1_")
+        # top row index=1 (odd), col=0 (even) -> parity mismatch, shift to 1.
         mat = [
             [[]],
-            [[cx1]],
-            [[cx1]],
+            [[DummyInstr("cx1c")]],  # control on row 1
+            [[DummyInstr("cx1t")]],  # target on row 2
         ]
         result = align_cx_matrix(mat)
-        # new width is 2
         self.assertEqual(len(result[0]), 2)
-        # row 0 unchanged
         self.assertEqual(result[0], [[], []], "Row 0 should be untouched")
-        # rows 1&2 moved to col 1
         self.assertEqual(result[1][0], [])
-        self.assertEqual(result[1][1][0].name, cx1.name)
-        self.assertEqual(result[2][1][0].name, cx1.name)
+        self.assertEqual(result[1][1][0].name, "cx1c")
+        self.assertEqual(result[2][1][0].name, "cx1t")
 
     def test_aligned_and_unaligned_bricks(self):
-        # cx2 on rows 0&1 at col 0 (aligned), cx3 on rows 1&2 at col 0 (unaligned)
-        cx2 = DummyInstr("cx2_")
-        cx3 = DummyInstr("cx3_")
+        # cx2 on rows 0&1 at col 0 (top=0 even, col=0 even -> aligned)
+        # cx3 on rows 1&2 at col 0 (top=1 odd, col=0 even -> unaligned, shifts)
         mat = [
-            [[cx2]],
-            [[cx2, cx3]],
-            [[cx3]],
+            [[DummyInstr("cx2c")], []],
+            [[DummyInstr("cx2t"), DummyInstr("cx3c")], []],
+            [[DummyInstr("cx3t")], []],
         ]
         result = align_cx_matrix(mat)
 
-        # visualiser.print_matrix(result)
         # cx2 remains at col 0
-        self.assertEqual(cx2.name, result[0][0][0].name)
-        self.assertIn(cx2.name, result[1][0][0].name)
-        # cx3 moves to col 1
-        self.assertNotIn(cx3.name, result[1][0][0].name)
-        self.assertIn(cx3.name, result[1][1][0].name)
-        self.assertIn(cx3.name, result[2][1][0].name)
+        self.assertEqual(result[0][0][0].name, "cx2c")
+        self.assertEqual(result[1][0][0].name, "cx2t")
+        # cx3 moves to col 1 (parity-corrected odd column for top=1 odd)
+        names_at_1_1 = [i.name for i in result[1][1]]
+        names_at_2_1 = [i.name for i in result[2][1]]
+        self.assertIn("cx3c", names_at_1_1)
+        self.assertIn("cx3t", names_at_2_1)
+        # cx3 should not have leaked into col 0
+        self.assertNotIn("cx3c", [i.name for i in result[1][0]])
+        self.assertNotIn("cx3t", [i.name for i in result[2][0]])
 
 
 from qiskit.circuit import Instruction

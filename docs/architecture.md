@@ -19,8 +19,10 @@ The package has three layers:
      brickwork columns. This pass must remain linear in the number of CX
      groups it places; every CX contributes one two-row brick, and tests assert
      that brick width grows linearly with CX count.
-   - `decomposer.insert_rotations_adjecant_to_cx` places single-qubit rotations
-     near neighbouring CX bricks.
+   - `decomposer.insert_rotations_adjacent_to_cx` places single-qubit
+     rotations near their neighbouring CX bricks. The legacy alias
+     `insert_rotations_adjecant_to_cx` (with the historical typo) remains
+     supported for backwards compatibility.
 
 3. Pattern generation
    - `graph_builder.generate_brickwork_graph_from_instruction_matrix` creates
@@ -87,6 +89,15 @@ verification = result.verify()
 
 This keeps large conversions usable without accidentally triggering
 exponential statevector work.
+
+Noisy simulation goes through `brickwork_transpiler.simulate_with_noise`,
+which is hard-wired to Graphix's **density-matrix backend**. That backend
+is the only one in Graphix with native `apply_noise` support;
+`tensornetwork` and `statevector` raise `NoiseNotSupportedError` on noise
+commands. `simulate_with_noise` also disables `standardize` and
+`shift_signals` by default so qubits are traced out as soon as they are
+measured, keeping peak DM dimension proportional to the pattern's local
+interaction degree rather than to the full graph node count.
 
 ## Stage Returns
 

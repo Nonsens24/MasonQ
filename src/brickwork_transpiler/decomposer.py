@@ -27,6 +27,27 @@ logger = logging.getLogger(__name__)
 Matrix = List[List[List[Instruction]]]
 
 
+def _is_cx_endpoint(name: str) -> bool:
+    """True iff `name` is a tagged CX endpoint produced by `instructions_to_matrix_dag`.
+
+    Tagged endpoints are `cx{id}c` for the control row and `cx{id}t` for the
+    target row. A literal `cx` from raw Qiskit (no id, no role suffix) does
+    NOT match — the alignment / placement passes never expect to see one.
+    """
+    return (
+        len(name) > 3
+        and name[0] == "c"
+        and name[1] == "x"
+        and name[-1] in ("c", "t")
+        and name[2:-1].isdigit()
+    )
+
+
+def _cx_group_id(name: str) -> str:
+    """Return the CX group id from a tagged endpoint name."""
+    return name[2:-1]
+
+
 # -------------------------------------------------------------------
 # 1) strip “Q” composite wrappers but keep MCX / MCU1 in place
 # -------------------------------------------------------------------
@@ -286,8 +307,25 @@ def decompose_qc_to_bricks_qiskit(
     multi_control_strategy: str = "hls",
     fallback_opt: int | None = 1,
 ):
-    if verbose:
-        logger.setLevel(logging.INFO)
+    """Decompose `qc` into the brickwork-compatible basis on a line coupling.
+
+    Steps:
+      1. `selective_decompose` opens composite gates while keeping multi-CTRL
+         operations intact for downstream policy.
+      2. `linearise_multi_ctrl` (when `with_ancillas=True`) rewrites large
+         multi-controlled X / phase gates with the chosen strategy.
+      3. Qiskit transpiles the result onto `[rz, rx, cx, id]` over a line
+         coupling map at the requested `opt` level. On failure, retries at
+         `fallback_opt` (when not `None`), since high-`opt` synthesis can hit
+         numerical edge cases on borderline matrices.
+
+    The `verbose` flag is accepted for API symmetry with `transpile(...)`,
+    which configures package-wide logging when set. This function does not
+    mutate the module-wide logger; pass `verbose=True` to the public
+    `transpile(...)` entry point or call `logging.basicConfig(...)` to see
+    the INFO-level diagnostics emitted below.
+    """
+    del verbose  # see docstring; verbosity is configured at the transpile entry point.
 
     logger.info("Original gate counts: %s", qc.count_ops())
 
@@ -498,48 +536,85 @@ def instructions_to_matrix_dag(qc: QuantumCircuit):
     for c_idx, col in enumerate(cols):  # c_idx is the column index
 
         for instr, qargs, _ in col:  # qargs[0] is the control qubit for Qiskit CX
-            control_qubit = True
-            for q in qargs:
-                # Use mutable copies so endpoint tags do not mutate Qiskit's
-                # original instruction singletons.
-                instr_mut = instr.to_mutable()
-                if instr_mut.name == "cx" and control_qubit:
-                    instr_mut.name = f"cx{cx_idx}c"
-                    cx_matrix[qubit_index[q]][c_idx].append(instr_mut)
-                    control_qubit = False
-                elif instr_mut.name == "cx" and not control_qubit:
-                    instr_mut.name = f"cx{cx_idx}t"
-                    cx_matrix[qubit_index[q]][c_idx].append(instr_mut)
-
-                matrix[qubit_index[q]][c_idx].append(instr_mut)
             if instr.name == "cx":
+                # CX produces two distinct endpoint instances with different
+                # tagged names. Only CXs need mutable copies; the originals
+                # stay untouched.
+                control_qubit = True
+                for q in qargs:
+                    instr_mut = instr.to_mutable()
+                    if control_qubit:
+                        instr_mut.name = f"cx{cx_idx}c"
+                        control_qubit = False
+                    else:
+                        instr_mut.name = f"cx{cx_idx}t"
+                    cx_matrix[qubit_index[q]][c_idx].append(instr_mut)
+                    matrix[qubit_index[q]][c_idx].append(instr_mut)
                 cx_idx += 1
+            else:
+                # Non-CX instructions are appended unchanged. Downstream code
+                # only reads `.name` and `.params`; no mutable copy needed.
+                for q in qargs:
+                    matrix[qubit_index[q]][c_idx].append(instr)
 
     return matrix, cx_matrix
 
 
-def align_cx_matrix(cx_matrix: Matrix) -> Matrix:
+def align_cx_matrix(
+    cx_matrix: Matrix,
+    orig_matrix: Optional[Matrix] = None,
+) -> Matrix:
     """Move CX endpoints to parity-compatible brick columns.
 
     Brickwork CX gadgets occupy adjacent rows. The top row determines the
-    required column parity: even top rows live in even brick columns and odd top
-    rows live in odd brick columns. The algorithm preserves each CX group's
-    original order on every touched row by tracking the maximum delay already
-    introduced on that row.
+    required column parity: even top rows live in even brick columns and odd
+    top rows live in odd brick columns.
+
+    The placement floor for a brick `B` on row `r` is the smallest column
+    that respects three constraints:
+      (i)  parity matches the brick's top-row parity;
+      (ii) `B` lands strictly after every same-row predecessor `A`
+           (`place_B >= place_A + 1`);
+      (iii) if a *rotation cell* on row `r` lives in the original matrix
+           strictly between `A`'s and `B`'s original columns, that rotation
+           must have an empty slot to land in after alignment, so
+           `place_B >= place_A + 2`.
+
+    The third constraint replaces the older `row_max_delta + ocol`
+    formulation, which preserved every original column gap (often producing
+    columns no rotation needed). The rotation-aware bound is tight: it only
+    reserves a slot when one will actually be claimed by
+    `insert_rotations_adjacent_to_cx`.
+
+    `orig_matrix`, when supplied, is the full instruction matrix containing
+    rotations and CX endpoints (typically `qc_mat` from
+    `instructions_to_matrix_dag`). When `None`, the function falls back to
+    the gap-preserving rule for backwards compatibility with callers that
+    only have the CX-only matrix.
     """
 
     n_rows = len(cx_matrix)
+    if n_rows == 0:
+        return []
+
     n_cols = max((len(r) for r in cx_matrix), default=0)
 
+    # ---- 1) Discover CX groups: rows touched and earliest original column ---
     group_info: Dict[str, Dict] = {}
     for r in range(n_rows):
-        for c in range(n_cols):
-            for instr in (cx_matrix[r][c] if c < len(cx_matrix[r]) else []):
-                if instr.name.startswith("cx"):
-                    gid = instr.name[2:-1]
-                    info = group_info.setdefault(gid, {"rows": set(), "orig_col": c})
-                    info["rows"].add(r)
-                    info["orig_col"] = min(info["orig_col"], c)
+        row = cx_matrix[r]
+        for c in range(min(n_cols, len(row))):
+            for instr in row[c]:
+                if _is_cx_endpoint(instr.name):
+                    gid = _cx_group_id(instr.name)
+                    info = group_info.get(gid)
+                    if info is None:
+                        group_info[gid] = {"rows": [r], "orig_col": c}
+                    else:
+                        if r not in info["rows"]:
+                            info["rows"].append(r)
+                        if c < info["orig_col"]:
+                            info["orig_col"] = c
 
     bricks = [
         {
@@ -550,61 +625,104 @@ def align_cx_matrix(cx_matrix: Matrix) -> Matrix:
         }
         for gid, info in group_info.items()
     ]
+    # Sort by (original column, integer gid). The integer gid breaks ties
+    # in the order Qiskit emitted the CX gates, preserving per-row order.
     bricks.sort(key=lambda b: (b["orig_col"], int(b["gid"]), b["top"]))
 
-    # 2.  Fast placement using per‑row aggregates
+    # ---- 1b) Per-row sorted list of original columns containing rotations --
+    rot_cols_per_row: List[List[int]] = [[] for _ in range(n_rows)]
+    if orig_matrix is not None:
+        for r in range(min(n_rows, len(orig_matrix))):
+            row = orig_matrix[r]
+            for c, cell in enumerate(row):
+                has_rot = False
+                for instr in cell:
+                    if not _is_cx_endpoint(instr.name):
+                        has_rot = True
+                        break
+                if has_rot:
+                    rot_cols_per_row[r].append(c)
 
-    aligned: Matrix = [[] for _ in range(n_rows)]
+    # ---- 2) Pre-allocate the output grid -----------------------------------
+    # Upper bound on final width: every brick can shift by at most 1 column
+    # to fix parity, plus 1 per same-row predecessor for rotation reservation,
+    # capped at the brick count. `n_cols + 2*n_bricks + 1` is a strict bound.
+    upper_bound = n_cols + 2 * len(bricks) + 1
+    aligned: Matrix = [[[] for _ in range(upper_bound)] for _ in range(n_rows)]
+    used_width = 0  # inclusive max column index actually written
 
-    row_max_delta: Dict[int, int] = {}  # row -> max(placed - orig)
-    row_same_orig: Dict[int, Dict[int, int]] = {}  # row -> {orig_col: placed}
+    # row -> (last placed column, original column of that brick)
+    row_last_placed: Dict[int, Tuple[int, int]] = {}
 
     for brick in bricks:
-        gid, rows, ocol, top_row = (
-            brick["gid"],
-            brick["rows"],
-            brick["orig_col"],
-            brick["top"],
-        )
+        gid = brick["gid"]
+        rows = brick["rows"]
+        ocol = brick["orig_col"]
+        top_row = brick["top"]
+        top_parity = top_row & 1
 
-        # 1) Parity-aligned base column.
-        base_col = ocol if (ocol % 2) == (top_row % 2) else ocol + 1
+        base_col = ocol if (ocol & 1) == top_parity else ocol + 1
 
-        # 2) Spacing floor from row aggregates. For each touched row, a later
-        # original CX cannot be placed before an earlier original CX after both
-        # have been delayed by alignment.
         floor = 0
         for r in rows:
-            if r in row_max_delta:
-                floor = max(floor, row_max_delta[r] + ocol)
+            entry = row_last_placed.get(r)
+            if entry is None:
+                continue
+            prev_placed, prev_ocol = entry
+            if orig_matrix is None:
+                # Backwards-compat: preserve the original column gap on this
+                # row. Equivalent to the legacy `row_max_delta + ocol` for
+                # the most-recent same-row brick.
+                row_floor = prev_placed + max(1, ocol - prev_ocol)
+            else:
+                # Rotation-aware: only reserve an extra slot if a rotation
+                # cell on this row lives between the two original columns.
+                gap = 1
+                if ocol - prev_ocol > 1:
+                    rot_cols = rot_cols_per_row[r]
+                    # rot_cols is sorted; check for any column strictly in
+                    # (prev_ocol, ocol).
+                    lo, hi = prev_ocol, ocol
+                    for rc in rot_cols:
+                        if rc <= lo:
+                            continue
+                        if rc >= hi:
+                            break
+                        gap = 2
+                        break
+                row_floor = prev_placed + gap
+            if row_floor > floor:
+                floor = row_floor
 
-            # special case: previous brick at *same* original column
-            if (same := row_same_orig.get(r, {}).get(ocol)) is not None:
-                floor = max(floor, same + 1)
-
-        # 3) Minimal column >= both base_col and floor, keeping parity.
-        place = max(base_col, floor)
-        if place % 2 != top_row % 2:
+        place = base_col if base_col >= floor else floor
+        if (place & 1) != top_parity:
             place += 1
 
-        # 4) Ensure output grid is wide enough.
-        for r in aligned:
-            while len(r) <= place:
-                r.append([])
+        # Defensive grow if our upper bound was somehow too small.
+        if place >= len(aligned[0]):
+            extra = place + 1 - len(aligned[0])
+            for row in aligned:
+                row.extend([[] for _ in range(extra)])
 
-        # 5) Copy exactly the CX endpoints that belong to this brick.
+        # Copy exactly the endpoints of this group from the original column.
         for r in rows:
+            cell = cx_matrix[r][ocol]
             instrs = [
                 instr
-                for instr in cx_matrix[r][ocol]
-                if instr.name.startswith(f"cx{gid}")
+                for instr in cell
+                if _is_cx_endpoint(instr.name)
+                and _cx_group_id(instr.name) == gid
             ]
-            aligned[r][place] = instrs
+            aligned[r][place] = list(aligned[r][place]) + instrs
+            row_last_placed[r] = (place, ocol)
 
-            # Update per-row aggregates.
-            delta = place - ocol
-            row_max_delta[r] = max(row_max_delta.get(r, -1), delta)
-            row_same_orig.setdefault(r, {})[ocol] = place
+        if place > used_width:
+            used_width = place
+
+    # ---- 3) Trim trailing empty columns ------------------------------------
+    final_width = used_width + 1 if bricks else 0
+    if final_width != len(aligned[0]):
+        aligned = [row[:final_width] for row in aligned]
 
     return aligned
 
@@ -616,24 +734,31 @@ def insert_rotations_adjecant_to_cx(
     """Insert rotation bricks around their neighbouring CX bricks.
 
     Qiskit's SU(2) decomposition emits local `rz/rx/rz` rotations between CX
-    layers. After CX alignment, rotations are reattached to the nearest aligned
-    neighbouring CX on the same qubit:
+    layers. After CX alignment, rotations are reattached to the nearest
+    aligned neighbouring CX on the same qubit:
 
-    - if the original left neighbour was a CX, place after that aligned CX;
-    - else if the original right neighbour was a CX, place before it;
-    - otherwise place in the leading all-rotation column.
+    - if the original left neighbour is a CX, place just after that aligned
+      CX (`place_cx + 1`);
+    - else if the original right neighbour is a CX, place just before it
+      (`max(place_cx - 1, 0)`);
+    - otherwise place in the leading all-rotation column (column 0).
 
     This is intentionally conservative. It avoids commuting rotations through
     CX gates, which would be a circuit optimisation and requires separate
     algebraic validation.
+
+    The aligned CX matrix is rectangular (every row has the same length), so
+    the width is read from `len(new_mat[0])` rather than recomputed each
+    iteration. Growth (when a rotation needs an extra column) is tracked
+    incrementally and applied to all rows in one slice.
     """
-    new_mat: Matrix = [[list(cell) for cell in row] for row in aligned_cx]
-
-    n_rows = len(new_mat)
+    n_rows = len(aligned_cx)
     if n_rows == 0:
-        return new_mat
+        return []
+    width = len(aligned_cx[0]) if aligned_cx else 0
 
-    width = max(len(r) for r in new_mat)
+    # Deep copy of the aligned grid so callers may freely mutate the result.
+    new_mat: Matrix = [[list(cell) for cell in row] for row in aligned_cx]
 
     # Per-row lookup: CX endpoint instruction name -> aligned column.
     cx_col: List[Dict[str, int]] = []
@@ -641,37 +766,70 @@ def insert_rotations_adjecant_to_cx(
         lookup: Dict[str, int] = {}
         for c, cell in enumerate(row):
             for ins in cell:
-                if ins.name.startswith("cx") and ins.name not in lookup:
+                if _is_cx_endpoint(ins.name) and ins.name not in lookup:
                     lookup[ins.name] = c
         cx_col.append(lookup)
 
+    def _grow_to(new_width: int) -> None:
+        nonlocal width
+        if new_width <= width:
+            return
+        extra = new_width - width
+        pad = [[] for _ in range(extra)]
+        for r in new_mat:
+            r.extend([list(cell) for cell in pad])
+        width = new_width
+
     for i in range(n_rows):
-        row_orig = original[i]
+        row_orig = original[i] if i < len(original) else []
         lookup = cx_col[i]
 
         for j, cell in enumerate(row_orig):
-            rots = [ins for ins in cell if not ins.name.startswith("cx")]
+            rots = [ins for ins in cell if not _is_cx_endpoint(ins.name)]
             if not rots:
                 continue
 
-            dest = 0
+            left_dest: Optional[int] = None
             if j > 0:
                 for ins in row_orig[j - 1]:
-                    if ins.name.startswith("cx"):
-                        dest = lookup[ins.name] + 1
+                    if _is_cx_endpoint(ins.name):
+                        left_dest = lookup[ins.name] + 1
                         break
 
-            if dest == 0 and j + 1 < len(row_orig):
+            right_dest: Optional[int] = None
+            if j + 1 < len(row_orig):
                 for ins in row_orig[j + 1]:
-                    if ins.name.startswith("cx"):
-                        dest = max(lookup[ins.name] - 1, 0)
+                    if _is_cx_endpoint(ins.name):
+                        right_dest = max(lookup[ins.name] - 1, 0)
                         break
+
+            # Choose the destination that is currently *not* occupied by a
+            # CX endpoint on this row. The aligner reserves a rotation slot
+            # next to every CX that has rotations, so at least one side is
+            # safe; if both sides are safe, prefer left (legacy behaviour).
+            candidates: List[int] = []
+            for cand in (left_dest, right_dest):
+                if cand is None:
+                    continue
+                cell_at_cand = (
+                    new_mat[i][cand] if cand < width else []
+                )
+                cand_clear = not any(
+                    _is_cx_endpoint(x.name) for x in cell_at_cand
+                )
+                if cand_clear:
+                    candidates.append(cand)
+            if candidates:
+                dest = candidates[0]
+            elif left_dest is not None:
+                dest = left_dest
+            elif right_dest is not None:
+                dest = right_dest
+            else:
+                dest = 0
 
             if dest >= width:
-                extra = dest - width + 1
-                for r in new_mat:
-                    r.extend([[]] * extra)
-                width += extra
+                _grow_to(dest + 1)
 
             new_mat[i][dest].extend(rots)
 
@@ -684,7 +842,7 @@ def insert_rotations_adjacent_to_cx(aligned_cx: Matrix, original: Matrix) -> Mat
 
 
 def align_bricks(cx_mat, orig):
-    cx_mat_aligned = align_cx_matrix(cx_mat)
+    cx_mat_aligned = align_cx_matrix(cx_mat, orig_matrix=orig)
     qc_mat_aligned = insert_rotations_adjacent_to_cx(cx_mat_aligned, orig)
 
     return qc_mat_aligned

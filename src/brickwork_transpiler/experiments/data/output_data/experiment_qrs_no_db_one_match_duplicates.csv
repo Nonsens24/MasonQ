@@ -1,8 +1,0 @@
-num_iterations,decomposed_depth,transpiled_depth,original_depth,num_gates_original,num_gates_transpiled,L,g
-
-0,60,77,9,52,90,4,3
-1,5695,7560,10,152,11570,8,3
-1,6090,8204,10,154,12476,16,3
-2,14361,18702,11,260,29696,32,3
-3,23958,30577,12,370,49377,64,3
-5,45613,57623,14,592,92501,128,3

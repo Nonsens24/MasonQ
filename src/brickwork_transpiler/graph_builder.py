@@ -1,19 +1,30 @@
+"""Build the structural NetworkX graph for a brickwork pattern.
+
+The graph carries no measurement angles itself — angles are injected later
+by `pattern_converter.to_pattern`. Two helpers live here:
+
+  - `create_tuple_node_graph` builds a `rows x cols` grid with horizontal
+    teleportation edges only. Used by the hand-built bricks in `bricks.py`.
+  - `generate_brickwork_graph_from_instruction_matrix` builds the full
+    rectangular brickwork graph, including the alternating brick-pair
+    vertical edges, from an aligned brick instruction matrix.
+"""
+
 import networkx as nx
 
 
-# Generates a single brick row graph
-def create_tuple_node_graph(rows, cols):
+def create_tuple_node_graph(rows: int, cols: int) -> nx.Graph:
+    """Return a `rows x cols` grid graph with horizontal-only edges.
 
-    G = nx.Graph()
-
-    for i in range(rows):
-        for j in range(cols):
-            G.add_node((i, j))
-    for i in range(rows):
-        for j in range(cols - 1):
-            G.add_edge((i, j), (i, j + 1))
-
-    return G
+    Nodes are `(row, col)` tuples. Each row carries `cols - 1` horizontal
+    edges (the teleportation chain). No vertical edges are added.
+    """
+    g = nx.Graph()
+    g.add_nodes_from((r, c) for r in range(rows) for c in range(cols))
+    g.add_edges_from(
+        ((r, c), (r, c + 1)) for r in range(rows) for c in range(cols - 1)
+    )
+    return g
 
 
 def generate_brickwork_graph_from_instruction_matrix(matrix):

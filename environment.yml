@@ -6,6 +6,7 @@ dependencies:
   - pip
   # Graphix pulls in quimb, which pulls in numba/llvmlite. Installing these
   # from conda avoids fragile local LLVM/C++ source builds on macOS.
+  - "numpy>=2,<2.3"
   - numba=0.61.2
   - llvmlite=0.44.0
   - pip:

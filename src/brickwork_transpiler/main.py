@@ -1,14 +1,15 @@
 """Demo entry point for local manual runs.
 
-Prefer installed/module execution:
+Prefer module execution:
 
     python -m brickwork_transpiler.main
 
-This file also supports direct execution from `src/brickwork_transpiler/main.py`
-because some IDEs run files that way. In that mode, Python puts the package
-directory itself on `sys.path`, which would make `import brickwork_transpiler`
-resolve to the sibling `brickwork_transpiler.py` module instead of the package.
-The bootstrap below replaces that path with the `src` directory.
+This script also supports direct execution from
+`src/brickwork_transpiler/main.py` because some IDEs run files that way. In
+that mode, Python puts the package directory itself on `sys.path`, which
+would shadow the package import with the sibling
+`brickwork_transpiler.py` module. The bootstrap below replaces that path
+with the `src` directory before importing the package.
 """
 
 from __future__ import annotations
@@ -18,14 +19,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-import numpy as np
 
-if __package__ in {None, ""}:
+if __package__ in {None, ""}:  # Direct file execution; rebuild sys.path safely.
     package_dir = Path(__file__).resolve().parent
     src_dir = package_dir.parent
     sys.path = [p for p in sys.path if Path(p or ".").resolve() != package_dir]
     sys.path.insert(0, str(src_dir))
 
+# Cache locations for Numba/Matplotlib must be set before importing graphix.
 os.environ.setdefault(
     "NUMBA_CACHE_DIR",
     str(Path(tempfile.gettempdir()) / "masonq_numba_cache"),
@@ -39,15 +40,219 @@ os.environ.setdefault(
     str(Path(tempfile.gettempdir()) / "masonq_cache"),
 )
 
-from brickwork_transpiler import brickwork_transpiler, circuits, utils
+from brickwork_transpiler import transpile
 
 
-def main():
-    from brickwork_transpiler import visualiser
+def main() -> int:
 
+    # CLOAKED
+    from brickwork_transpiler.cloak import sensitive, summarize_cloaked, cloak_compile
+    from qiskit import QuantumCircuit, QuantumRegister
+    from brickwork_transpiler.cloak import sensitive, draw_cloaked, summarize_cloaked
+
+    # qc = QuantumCircuit(3, name="mixed-demo")
+    # qc.h([0, 1, 2])  # 3 clear gates
+    # with sensitive(qc, [0, 1, 2], label="oracle") as oracle:
+    #     oracle.cx(0, 1)
+    #     oracle.x(2)
+    #     oracle.cx(1, 2)  # 3 blind gates
+    # qc.h([0, 1, 2]);
+    # qc.cx(0, 1)  # 4 more clear gates
+
+    """One QAOA layer over a 4-asset universe.
+
+     Public structure:
+       - Hadamards on every asset qubit (uniform superposition over portfolios).
+       - X-mixer with angle `2*beta` (standard QAOA mixer).
+
+     Sensitive sub-circuit:
+       - The phase separator e^{-i gamma * H_C}, where H_C is built from
+         ALPHA_MATRIX.  Each entry Q[i, j] becomes the rotation angle of a
+         CX-RZ-CX gadget on qubits (i, j).
+     """
+
+    import numpy as np
+    from qiskit import QuantumCircuit
+
+    from brickwork_transpiler.cloak import cloak_compile, sensitive, simulate_cloaked
+
+    # # ---------------------------------------------------------------------------
+    # # PROPRIETARY: this is the part that would never leave the fund's office.
+    # # ---------------------------------------------------------------------------
+    # ALPHA_MATRIX = np.array(
+    #     [
+    #         [0.00, 0.82, -0.31, 0.47],
+    #         [0.82, 0.00, 0.18, -0.39],
+    #         [-0.31, 0.18, 0.00, 0.66],
+    #         [0.47, -0.39, 0.66, 0.00],
+    #     ]
+    # )
+    # gamma: float = 0.4
+    # beta: float = 0.3
+    #
+    # qc = QuantumCircuit(4, name="finance_qaoa")
+    # qc.h([0, 1, 2, 3])
+    #
+    # with sensitive(qc, [0, 1, 2, 3], label="alpha-model") as cost:
+    #     for i in range(4):
+    #         for j in range(i + 1, 4):
+    #             w = float(ALPHA_MATRIX[i, j])
+    #             if w == 0.0:
+    #                 continue
+    #             cost.cx(i, j)
+    #             cost.rz(2.0 * gamma * w, j)
+    #             cost.cx(i, j)
+    #
+    # for q in range(4):
+    #     qc.rx(2.0 * beta, q)
+
+    # ---------------------------------------------------------------------------
+    # PROPRIETARY: one- and two-electron integrals for the candidate molecule.
+    # In production these come from a classical Hartree-Fock / CCSD solver and
+    # are guarded behind every NDA the company has.
+    # ---------------------------------------------------------------------------
+    ONE_BODY = np.array([-1.252, -0.475, -0.612, -0.213])
+    TWO_BODY_J = 0.674
+    TROTTER_DT = 0.15
+
+    def build_pharma_circuit(*, ansatz_theta: float = 0.42) -> QuantumCircuit:
+        """4-qubit VQE: HF reference + one ansatz layer + one Trotter step.
+
+        Public:
+          - Hartree-Fock reference state (two electrons in the lowest orbitals).
+          - One layer of hardware-efficient ansatz (RY rotations + entangling
+            CXs).  The variational parameter `ansatz_theta` is what the
+            optimiser updates each iteration; the *structure* of the ansatz is
+            common knowledge.
+
+        Sensitive sub-circuit:
+          - One Trotter step exp(-i * H_mol * dt).  RZ angles carry ONE_BODY
+            and TWO_BODY_J; flipping the sign of any of those angles flips an
+            electron-electron interaction strength.
+        """
+        qc = QuantumCircuit(4, name="pharma_vqe")
+
+        # Public Hartree-Fock reference: lowest two orbitals occupied.
+        qc.x([0, 1])
+
+        # Public hardware-efficient ansatz (one layer, single parameter for demo).
+        for q in range(4):
+            qc.ry(ansatz_theta, q)
+        qc.cx(0, 1)
+        qc.cx(2, 3)
+        qc.cx(1, 2)
+
+        # Sensitive: one Trotter step of the molecular Hamiltonian.
+        with sensitive(qc, [0, 1, 2, 3], label="molecular-hamiltonian") as mol:
+            # One-body diagonal Z rotations.
+            for q, h in enumerate(ONE_BODY):
+                mol.rz(2.0 * float(h) * TROTTER_DT, q)
+            # One representative two-body Z⊗Z⊗Z⊗Z term, conjugated by CX ladder.
+            mol.cx(0, 1)
+            mol.cx(1, 2)
+            mol.cx(2, 3)
+            mol.rz(2.0 * TWO_BODY_J * TROTTER_DT, 3)
+            mol.cx(2, 3)
+            mol.cx(1, 2)
+            mol.cx(0, 1)
+
+        return qc
+
+    # qc = build_pharma_circuit(ansatz_theta=0.42)
+
+    # ---------------------------------------------------------------------------
+    # CLASSIFIED: capability-graph edge weights.
+    # Each (i, j, w) entry encodes the joint mission utility of pairing asset i
+    # with asset / target j; the magnitudes reflect classified capability data.
+    # ---------------------------------------------------------------------------
+    CAPABILITY_EDGES = [
+        (0, 1, 0.92),
+        (0, 2, 0.55),
+        (0, 3, 0.31),
+        (1, 2, 0.41),
+        (1, 3, 0.78),
+        (2, 3, 0.69),
+    ]
+
+    def build_def_circuit(*, gamma: float = 0.5, beta: float = 0.35) -> QuantumCircuit:
+        """One QAOA layer over the classified capability graph."""
+        qc = QuantumCircuit(4, name="defence_logistics")
+        qc.h([0, 1, 2, 3])
+
+        with sensitive(qc, [0, 1, 2, 3], label="capability-graph") as mission:
+            for i, j, w in CAPABILITY_EDGES:
+                mission.cx(i, j)
+                mission.rz(2.0 * gamma * w, j)
+                mission.cx(i, j)
+
+        for q in range(4):
+            qc.rx(2.0 * beta, q)
+
+        return qc
+
+    # qc = build_def_circuit()
+
+    # ---------------------------------------------------------------------------
+    # CONFIDENTIAL: a single query's feature vector.  In production this is the
+    # input data the customer / patient / regulator paid for privacy on.
+    # ---------------------------------------------------------------------------
+    FEATURES = np.array([0.85, -0.42, 1.23])
+
+    # Trained ansatz parameters — also IP, but in this example we expose them
+    # to keep the demo focused on input-data privacy.
+    TRAINED_THETAS = np.array([0.31, -0.55, 0.18])
+
+    def build_qml_circuit() -> QuantumCircuit:
+        """3-qubit kernel-style inference circuit.
+
+        Sensitive sub-circuit:
+          - Data re-uploading layer.  Two rotation passes over the qubits, each
+            carrying the per-feature angles, separated by an entangling sweep.
+            The angles ARE the input data.
+
+        Public:
+          - Trained ansatz with frozen weights `TRAINED_THETAS`.  The classifier
+            decision-boundary lives in these parameters; in this example we
+            treat them as public to keep the focus on input-data privacy.
+        """
+        qc = QuantumCircuit(3, name="qml_kernel")
+
+        with sensitive(qc, [0, 1, 2], label="data-embedding") as embed:
+            # First pass — angle encoding.
+            for q, xi in enumerate(FEATURES):
+                embed.ry(float(xi), q)
+                embed.rz(float(xi) ** 2, q)
+            # Entangling sweep.
+            embed.cx(0, 1)
+            embed.cx(1, 2)
+            # Re-uploading pass for higher expressivity.
+            for q, xi in enumerate(FEATURES):
+                embed.ry(float(xi), q)
+
+        # Public trained ansatz.
+        for q, theta in enumerate(TRAINED_THETAS):
+            qc.ry(float(theta), q)
+        qc.cx(0, 1)
+        qc.cx(1, 2)
+
+        return qc
+
+    # qc = build_qml_circuit()
+    qc = build_pharma_circuit(ansatz_theta=0.42)
+    print(summarize_cloaked(qc))
+    job = cloak_compile(qc, rounds=3, seed=0)
+    print(job.metadata["blind_share"].format())
+    print(draw_cloaked(qc, output="text"))
+
+    return 0
+
+    """Run a small QFT example end-to-end and print summary information.
+
+    Intended as a smoke test for local installs and as a copy-paste starting
+    point for new users. Replace `circuits.qft(3)` with any
+    `(QuantumCircuit, Statevector)` pair to try other examples.
+    """
     qc, input_vector = circuits.qft(3)
-
-    from brickwork_transpiler import transpile
 
     result = transpile(
         qc,
@@ -59,95 +264,31 @@ def main():
         return_result=True,
         return_stage="sparse_matrix",
     )
-
     print(result)
 
-    pattern = result.pattern
-    decomposed_qc = result.decomposed_circuit
-    resources = result.resources
-
-    result.simulate()
-
-    result.plot(show=True)
-
-
-
-    print("pattern: ", pattern)
-    print("decomposed_qc: ", decomposed_qc)
-    print("resources: ", resources)
-
-    return 0
-
-    # qc, input_vector = circuits.h_and_cx_circ()
-    # qc, input_vector = circuits.minimal_qrs([0, 0])
-    # qc, input_vector = circuits.big_shifter_both_up_low_rotation_brick_shifted()
-    qc, input_vector = circuits.qft(3)
-
-    iv2 = input_vector.copy()
-
-    qc.draw(output='mpl',
-                        fold=40,
-                        style="iqp"
-                        )
-
-
-
-    bw_pattern, col_map, decomposed_qc = brickwork_transpiler.transpile(
-        qc, input_vector,
+    # The "sparse_matrix" stage stops before the Graphix pattern is built, so
+    # the demo continues with a full transpile if a richer object is needed.
+    full = transpile(
+        qc,
+        input_vector,
         routing_method="sabre",
         layout_method="trivial",
-        with_ancillas=False
+        with_ancillas=True,
+        fallback_opt=1,
+        return_result=True,
     )
+    full.simulate()
+    full.plot(show=True)
+
+    print("pattern:         ", full.pattern)
+    print("decomposed_qc:   ", full.decomposed_circuit)
+    print("resources:       ", full.resources)
 
 
-    # Plot informative graph
-    visualiser.plot_brickwork_graph_from_pattern(bw_pattern,
-                                                 show_angles=True,
-                                                 node_colours=col_map,
-                                                 use_node_colours=True,
-                                                 title="Brickwork graph: sel_decomp_test",
-                                                 save_plot=True,
-                                                 show=True)
 
-    print("Simulating circuit...")
-
-    # Preprocess data to standard form
-    bw_pattern.standardize()
-    bw_pattern.shift_signals()
-
-    # Get the output state from Graphix simulation
-    tn = bw_pattern.simulate_pattern(
-        backend="tensornetwork",
-        graph_prep="parallel",
-        rng=np.random.default_rng(0),
-    )
-    psi = tn.to_statevector()
-
-    # Extend input vector with new ancillae qubits
-    reference_output = utils.calculate_ref_state_from_qiskit_circuit(bw_pattern, qc, decomposed_qc, input_vector)
-
-    # Now compare against the MBQC simulator output `psi`
-    if utils.assert_equal_up_to_global_phase(reference_output, psi):
-        print("Equivalent up to global phase!")
-
-    print(f"Qiskit ref_state: {reference_output}")
-    print(f"Simulated output state: {psi}")
-    # Compare output state upto global phase
-    if utils.assert_equal_up_to_global_phase(reference_output, psi):
-        print("Equivalent up to global phase!")
-
-
-    # hhl_transpilation.experiment_hhl_transpilation(7)
-    # hhl_transpilation.plot_single_hhl_dataset("HHL_logN_sq")
-    # hhl_transpilation.plot_hhl_from_multiple_files("thesis_hhl_final_plots_unopt_dense_d_avg")
-    # qft_transpilation.plot_single_qft_dataset("thesis_qft_log3_bound")
-    # plot_qrs_data.plot_qrs_with_db_scaling_from_files("qrs_with_db_L_no_decomp")
-    # hhl_transpilation.plot_depth_per_gate_vs_m_logfit("vs_m_plot")
-    # hhl_transpilation.plot_scaling_with_m_as_width("d_or_m_overlay_hhl_exp_toeplitz_raw_no_log")
-    # hhl_transpilation.plot_hhl_davg_three()
 
     return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

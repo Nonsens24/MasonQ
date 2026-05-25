@@ -17,7 +17,7 @@ Core targets:
 - Numba >= 0.61, < 0.62 and llvmlite >= 0.44, < 0.45 for Quimb/Graphix
 - Qiskit Aer >= 0.17.2, < 0.18 for local simulation helpers
 - qiskit-algorithms >= 0.4.0, < 0.5 for QRS/Grover helpers
-- matplotlib, pylatexenc, pandas, and scipy for normal scientific workflows
+- matplotlib >= 3.9, pylatexenc, pandas, and scipy for normal scientific workflows
 - qiskit-ibm-runtime >= 0.46.1, < 0.47 only for optional IBM cloud/backend access
 
 ## Deprecated Packages To Remove
@@ -62,7 +62,8 @@ If you must repair the existing environment:
 
 ```bash
 python -m pip uninstall -y qiskit-terra qiskit-ibm-provider qiskit-ibmq-provider graphix-ibmq
-python -m pip install --upgrade "numpy>=2,<2.3" "qiskit>=2.4.1,<3" \
+python -m pip install --upgrade "numpy>=2,<2.3" "matplotlib>=3.9,<4" \
+  "qiskit>=2.4.1,<3" \
   "qiskit-aer>=0.17.2,<0.18" "qiskit-algorithms>=0.4.0,<0.5" \
   "graphix>=0.3.5,<0.4" "numba>=0.61,<0.62" "llvmlite>=0.44,<0.45"
 python -m pip install -e .

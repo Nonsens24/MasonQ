@@ -106,6 +106,45 @@ def test_return_stage_graph_data_and_networkx_graph_are_consistent():
     assert graph.number_of_edges() > 0
 
 
+def test_transpile_progress_output_is_clear(capsys):
+    qc = _small_circuit()
+
+    resources = transpile(qc, return_stage="resources", progress=True)
+
+    captured = capsys.readouterr()
+    assert resources.graph_depth > 0
+    assert "[MasonQ] Starting transpilation:" in captured.out
+    assert "Qiskit decomposition complete" in captured.out
+    assert "Returning resource estimate." in captured.out
+
+
+def test_verify_progress_output_is_clear(capsys):
+    qc = QuantumCircuit(2)
+    qc.h(0)
+    qc.cx(0, 1)
+
+    result = transpile(qc, Statevector.from_label("++"), return_result=True)
+    verification = result.verify(progress=True)
+
+    captured = capsys.readouterr()
+    assert verification.equivalent
+    assert "[MasonQ] Starting verification:" in captured.out
+    assert "Graphix simulation complete" in captured.out
+    assert "Verification complete:" in captured.out
+
+
+def test_progress_callback_receives_messages():
+    qc = QuantumCircuit(1)
+    qc.h(0)
+    messages: list[str] = []
+
+    transpile(qc, return_stage="decomposed_circuit", progress=messages.append)
+
+    assert messages
+    assert messages[0].startswith("[MasonQ] Starting transpilation:")
+    assert any("Returning decomposed circuit." in message for message in messages)
+
+
 def test_unknown_return_stage_fails_before_pipeline_work():
     qc = _small_circuit()
 

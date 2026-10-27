@@ -21,9 +21,6 @@ from .result import TranspileResult, VerificationResult
 from .sparse import SparseInstructionMatrix
 from ._versions import show_versions
 
-# Cloak (subcircuit-blinder) surface — explicit submodule for the product layer.
-from . import cloak
-
 __version__ = "0.2.0"
 
 __all__ = [
@@ -48,5 +45,4 @@ __all__ = [
     "estimate_resources",
     "SparseInstructionMatrix",
     "show_versions",
-    "cloak",
 ]

@@ -13,7 +13,7 @@ import pytest
 from qiskit import QuantumCircuit
 
 from brickwork_transpiler import decomposer
-from brickwork_transpiler.decomposer import _is_cx_endpoint
+from brickwork_transpiler.cx_tags import is_cx_endpoint
 
 
 def _row_rotation_multiset(matrix):
@@ -22,7 +22,7 @@ def _row_rotation_multiset(matrix):
         ms: Counter = Counter()
         for cell in row:
             for instr in cell:
-                if _is_cx_endpoint(instr.name):
+                if is_cx_endpoint(instr.name):
                     continue
                 key = (
                     instr.name,
@@ -39,7 +39,7 @@ def _row_cx_endpoint_multiset(matrix):
         ms: Counter = Counter()
         for cell in row:
             for instr in cell:
-                if _is_cx_endpoint(instr.name):
+                if is_cx_endpoint(instr.name):
                     ms[instr.name] += 1
         out.append(ms)
     return out
@@ -71,7 +71,7 @@ def test_random_small_circuit_no_rotation_dropped(seed):
     )
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed)
     aligned_cx = decomposer.align_cx_matrix(cx_mat, orig_matrix=qc_mat)
-    final = decomposer.insert_rotations_adjecant_to_cx(aligned_cx, qc_mat)
+    final = decomposer.insert_rotations_adjacent_to_cx(aligned_cx, qc_mat)
 
     rotations_in = _row_rotation_multiset(qc_mat)
     rotations_out = _row_rotation_multiset(final)
@@ -115,8 +115,8 @@ def test_no_mixed_cx_rotation_cell_after_insertion():
         for r, row in enumerate(final):
             for c, cell in enumerate(row):
                 names = [i.name for i in cell]
-                has_cx = any(_is_cx_endpoint(n) for n in names)
-                has_rot = any(not _is_cx_endpoint(n) for n in names)
+                has_cx = any(is_cx_endpoint(n) for n in names)
+                has_rot = any(not is_cx_endpoint(n) for n in names)
                 assert not (has_cx and has_rot), (
                     f"mixed CX/rotation cell at ({r},{c}): {names}"
                 )

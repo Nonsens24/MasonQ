@@ -1,15 +1,16 @@
+import unittest
+
+import numpy as np
 import pytest
 from qiskit import QuantumCircuit
-from brickwork_transpiler.utils import pad_with_plus_for_transpiled
 from qiskit.quantum_info import Statevector
 
-import unittest
-import os
-import csv
-import tempfile
-
 from brickwork_transpiler import utils
-import numpy as np
+from brickwork_transpiler.utils import (
+    get_qiskit_permutation,
+    get_qubit_entries,
+    pad_with_plus_for_transpiled,
+)
 
 
 def test_identical_states():
@@ -89,7 +90,10 @@ def test_global_phase_4d():
     assert utils.assert_equal_up_to_global_phase(state, phased) is True
 
 
-
+def test_state_overlap_accepts_statevectors_and_arrays():
+    sv = Statevector.from_label("+")
+    overlap = utils.state_overlap(sv, np.asarray(sv.data))
+    assert overlap == pytest.approx(1.0)
 
 
 class TestInputStateVectorExtender(unittest.TestCase):
@@ -104,6 +108,15 @@ class TestInputStateVectorExtender(unittest.TestCase):
         assert sv_out is sv_in  # exact same object
         assert sv_out.num_qubits == 2
 
+    def test_array_input_is_converted(self):
+        """A plain array of amplitudes is accepted and converted to a Statevector."""
+        qc = QuantumCircuit(1)
+        transpiled_qc = QuantumCircuit(1)
+
+        sv_out = pad_with_plus_for_transpiled(np.array([1.0, 0.0]), qc, transpiled_qc)
+
+        assert isinstance(sv_out, Statevector)
+        assert sv_out.num_qubits == 1
 
     def test_raises_when_transpiled_smaller_than_original(self):
         """If transpiled circuit has fewer qubits, raise ValueError."""
@@ -113,7 +126,6 @@ class TestInputStateVectorExtender(unittest.TestCase):
 
         with pytest.raises(ValueError, match="fewer qubits"):
             _ = pad_with_plus_for_transpiled(sv_in, qc, transpiled_qc)
-
 
     def test_input_is_unmodified_and_output_is_distinct_when_padding_occurs(self):
         """When k>0, the function must not mutate sv_in, and must return a different object."""
@@ -131,61 +143,6 @@ class TestInputStateVectorExtender(unittest.TestCase):
         # Correct dimension
         assert sv_out.num_qubits == 3
 
-from brickwork_transpiler.utils import BufferedCSVWriter
-
-
-class TestBufferedCSVWriter(unittest.TestCase):
-
-    def setUp(self):
-        # Create a temporary file for each test
-        self.temp_file = tempfile.NamedTemporaryFile(delete=False)
-        self.temp_file.close()
-        os.unlink(self.temp_file.name)  # Ensure it doesn't exist initially
-        self.headers = ["a", "b", "c"]
-
-    def tearDown(self):
-        # Clean up temporary file after each test
-        if os.path.exists(self.temp_file.name):
-            os.remove(self.temp_file.name)
-
-    def test_header_written_on_init(self):
-        """Ensure the header is written when the file does not exist."""
-        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
-        with open(self.temp_file.name, newline='') as f:
-            reader = csv.reader(f)
-            header = next(reader)
-        self.assertEqual(header, self.headers)
-
-    def test_flush_writes_row(self):
-        """Ensure flush() writes a buffered row to the CSV file."""
-        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
-        writer.set("a", 1)
-        writer.set("b", 2)
-        writer.flush()
-
-        with open(self.temp_file.name, newline='') as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["a"], "1")
-        self.assertEqual(rows[0]["b"], "2")
-        self.assertEqual(rows[0]["c"], "")  # Missing field should be empty string
-
-    def test_row_buffer_cleared_after_flush(self):
-        """Ensure the buffer is cleared after flushing."""
-        writer = BufferedCSVWriter(self.temp_file.name, self.headers)
-        writer.set("a", 42)
-        writer.flush()
-        self.assertEqual(writer.row, {})
-
-
-from brickwork_transpiler.utils import (
-    index_to_coordinates,
-    map_indices_to_coordinates,
-    get_qubit_entries,
-    get_qiskit_permutation,
-)
 
 class DummyBWPattern:
     """Mock object to simulate bw_pattern with output_nodes."""
@@ -194,25 +151,6 @@ class DummyBWPattern:
 
 
 class TestHelperFunctions(unittest.TestCase):
-
-    def test_index_to_coordinates_basic(self):
-        """Check correct (row, col) mapping in a simple grid."""
-        self.assertEqual(index_to_coordinates(0, 3), (0, 0))
-        self.assertEqual(index_to_coordinates(2, 3), (0, 2))
-        self.assertEqual(index_to_coordinates(3, 3), (1, 0))
-        self.assertEqual(index_to_coordinates(7, 3), (2, 1))
-
-    def test_index_to_coordinates_edge(self):
-        """Ensure correct behavior for single-column or single-row cases."""
-        self.assertEqual(index_to_coordinates(5, 1), (5, 0))  # single column
-        self.assertEqual(index_to_coordinates(4, 10), (0, 4))  # single row
-
-    def test_map_indices_to_coordinates(self):
-        """Verify mapping for a list of indices."""
-        indices = [0, 1, 2, 3]
-        result = map_indices_to_coordinates(indices, 2)
-        expected = {0: (0, 0), 1: (0, 1), 2: (1, 0), 3: (1, 1)}
-        self.assertEqual(result, expected)
 
     def test_get_qubit_entries_valid(self):
         """Ensure correct extraction of qubit indices from bw_pattern."""
@@ -234,4 +172,3 @@ class TestHelperFunctions(unittest.TestCase):
         """Ensure None input raises AssertionError."""
         with self.assertRaises(AssertionError):
             get_qiskit_permutation(None)
-

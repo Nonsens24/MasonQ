@@ -5,14 +5,9 @@ and reviewers.
 
 ## System Overview
 
-MasonQ has two connected layers:
-
-1. The brickwork transpiler
-   Converts Qiskit circuits into aligned brickwork structures and Graphix
-   patterns.
-2. The cloak layer
-   Selectively compiles marked subcircuits into blind, verifiable brickwork
-   patches while leaving the public scaffold intact.
+MasonQ is a whole-circuit brickwork transpiler. It converts Qiskit circuits
+into aligned brickwork structures and Graphix patterns; the pipeline below is
+the entire package.
 
 ## Transpiler Pipeline
 

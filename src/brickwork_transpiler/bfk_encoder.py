@@ -1,17 +1,21 @@
+"""BFK Protocol-1 encoding of a whole brickwork pattern.
+
+Alice prepares every graph qubit as |+_theta> with theta drawn from the
+pi/4 grid and blinds each measurement angle phi to delta = phi + theta + r
+(mod 2, in units of pi). The returned pattern carries Bob's blinded angles;
+the metadata records Alice's theta and r and the copied dependency domains.
+"""
+
+from __future__ import annotations
+
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Iterable
 
 import numpy as np
-
-from .pattern_converter import _prepare_graphix_runtime
-
-_prepare_graphix_runtime()
-
 from graphix import Pattern
 from graphix.command import M, X, Z
 from graphix.measurements import Measurement
-
 
 THETA_GRID = tuple(k / 4.0 for k in range(8))
 
@@ -31,7 +35,7 @@ class BFKQubitPreparation:
     def state_label(self) -> str:
         return f"|+_{{{self.theta}pi}}>"
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "node": self.node,
             "theta": self.theta,
@@ -40,16 +44,12 @@ class BFKQubitPreparation:
         }
 
 
-def _as_float(value: Any) -> float:
-    return float(value)
-
-
 def _is_grid_angle(theta: Any, *, tol: float = 1e-12) -> bool:
-    theta_mod = _as_float(theta) % 2.0
+    theta_mod = float(theta) % 2.0
     return any(abs(theta_mod - grid_theta) < tol for grid_theta in THETA_GRID)
 
 
-def _validate_theta_lookup(theta_lookup: Dict[Any, float]) -> None:
+def _validate_theta_lookup(theta_lookup: dict[Any, float]) -> None:
     invalid = {node: theta for node, theta in theta_lookup.items() if not _is_grid_angle(theta)}
     if invalid:
         raise ValueError(
@@ -65,56 +65,42 @@ def _command_nodes(cmd: Any) -> Iterable[Any]:
         yield from cmd.nodes
 
 
-def _pattern_nodes(pattern: Pattern) -> List[Any]:
+def _pattern_nodes(pattern: Pattern) -> list[Any]:
+    """Return the nodes of `pattern`.
+
+    For a pattern built by Graphix these are its prepared nodes. A hand-built
+    pattern without N commands falls back to every node its inputs, outputs
+    or commands mention.
+    """
+    prepared_nodes = getattr(pattern, "nodes", None) or pattern.extract_nodes  # renamed in Graphix 0.4
     try:
-        nodes = list(pattern.extract_nodes())
-        if nodes or not pattern._Pattern__seq:
-            return nodes
-    except Exception:
-        pass
+        nodes = prepared_nodes()
+    except Exception:  # hand-built patterns may hold commands Graphix does not know
+        nodes = set()
+    if nodes or len(pattern) == 0:
+        return list(nodes)
 
     nodes = set(pattern.input_nodes) | set(pattern.output_nodes)
-    for cmd in pattern._Pattern__seq:
+    for cmd in pattern:
         nodes.update(_command_nodes(cmd))
     return sorted(nodes)
 
 
-def _measurement_angle(cmd: M) -> float:
-    if hasattr(cmd, "angle"):
-        return _as_float(cmd.angle)
-    return _as_float(cmd.measurement.angle)
-
-
-def _measurement_plane(cmd: M) -> Any:
-    if hasattr(cmd, "plane"):
-        return cmd.plane
-    return cmd.measurement.plane
-
-
-def _blinded_measurement(plane: Any, angle: float) -> Any:
-    if isinstance(plane, str):
-        plane_name = plane
-    else:
-        plane_name = plane.name
-    return getattr(Measurement, plane_name)(angle)
-
-
-def _make_m_command(cmd: M, angle: float) -> M:
-    plane = _measurement_plane(cmd)
-    try:
-        return M(cmd.node, _blinded_measurement(plane, angle), set(cmd.s_domain), set(cmd.t_domain))
-    except TypeError:
-        return M(cmd.node, plane, angle, set(cmd.s_domain), set(cmd.t_domain))
+def _blinded_m(cmd: M, delta: float) -> M:
+    """Copy of the measurement command `cmd` with its angle replaced by `delta`."""
+    plane = cmd.measurement.to_bloch().plane
+    measurement = getattr(Measurement, plane.name)(delta)
+    return M(cmd.node, measurement, set(cmd.s_domain), set(cmd.t_domain))
 
 
 def sample_qubit_preparations(
     pattern: Pattern,
-    theta_lookup: Optional[Dict[Any, float]] = None,
-    rng: Optional[np.random.Generator] = None,
+    theta_lookup: dict[Any, float] | None = None,
+    rng: np.random.Generator | None = None,
     *,
     quantum_outputs: bool = False,
     validate_theta_grid: bool = True,
-) -> List[BFKQubitPreparation]:
+) -> list[BFKQubitPreparation]:
     """Sample Alice's BFK qubit encodings for the graph qubits.
 
     Protocol 1 prepares every graph qubit as ``|+_theta>`` with theta chosen
@@ -129,24 +115,26 @@ def sample_qubit_preparations(
         _validate_theta_lookup(theta_lookup)
 
     output_nodes = set(pattern.output_nodes) if quantum_outputs else set()
-    preparations: List[BFKQubitPreparation] = []
+    preparations: list[BFKQubitPreparation] = []
     for node in _pattern_nodes(pattern):
         if node in output_nodes:
             theta_lookup[node] = 0.0
         elif node not in theta_lookup:
             theta_lookup[node] = float(rng.integers(0, 8) / 4.0)
-        preparations.append(BFKQubitPreparation(node=node, theta=_as_float(theta_lookup[node]) % 2.0))
+        preparations.append(BFKQubitPreparation(node=node, theta=float(theta_lookup[node]) % 2.0))
     return preparations
 
 
-def encode_pattern(pattern: Pattern,
-                theta_lookup: Optional[Dict[Any, float]] = None,
-                rng: Optional[np.random.Generator] = None,
-                remove_dependencies: bool = False,
-                *,
-                return_metadata: bool = False,
-                quantum_outputs: bool = False,
-                validate_theta_grid: bool = True):
+def encode_pattern(
+    pattern: Pattern,
+    theta_lookup: dict[Any, float] | None = None,
+    rng: np.random.Generator | None = None,
+    remove_dependencies: bool = False,
+    *,
+    return_metadata: bool = False,
+    quantum_outputs: bool = False,
+    validate_theta_grid: bool = True,
+):
     """
     Blind each measurement angle δ = φ' + θ + r (mod 2), all in units of π.
 
@@ -173,37 +161,32 @@ def encode_pattern(pattern: Pattern,
     preparation_by_node = {prep.node: prep for prep in preparations}
 
     new_pat = deepcopy(pattern)
-    new_seq: List[Any] = []
-    info_list: List[Dict[str, Any]] = []
+    new_seq: list[Any] = []
+    info_list: list[dict[str, Any]] = []
 
-    for cmd in new_pat._Pattern__seq:
+    for cmd in new_pat:
         if isinstance(cmd, M):
-            phi = _measurement_angle(cmd)  # treat as given (φ or already-adapted φ′)
-
+            phi = float(cmd.measurement.to_bloch().angle)  # φ, or an already-adapted φ′
             theta = preparation_by_node[cmd.node].theta
-
             r = int(rng.integers(0, 2))  # {0,1}
+            delta = ((phi % 2.0) + theta + r) % 2.0
 
-            # compute blinded angle δ in units of π (mod 2)
-            delta = (((phi % 2.0) + theta + r)) % 2.0
-
-            # write blinded command with δ
-            new_seq.append(_make_m_command(cmd, delta))
-
-            # record metadata (include δ for convenience)
-            info_list.append(dict(
-                node=cmd.node,
-                phi=phi,
-                theta=theta,
-                r=r,
-                delta=delta,
-                preparation=preparation_by_node[cmd.node].as_dict(),
-                outcome_flip=r,
-                x_byproducts=set(),
-                z_byproducts=set(),
-                s_domain=set(cmd.s_domain),
-                t_domain=set(cmd.t_domain),
-            ))
+            new_seq.append(_blinded_m(cmd, delta))
+            info_list.append(
+                dict(
+                    node=cmd.node,
+                    phi=phi,
+                    theta=theta,
+                    r=r,
+                    delta=delta,
+                    preparation=preparation_by_node[cmd.node].as_dict(),
+                    outcome_flip=r,
+                    x_byproducts=set(),
+                    z_byproducts=set(),
+                    s_domain=set(cmd.s_domain),
+                    t_domain=set(cmd.t_domain),
+                )
+            )
 
         elif isinstance(cmd, X):
             if info_list:
@@ -220,6 +203,8 @@ def encode_pattern(pattern: Pattern,
         else:
             new_seq.append(cmd)
 
+    # Graphix offers no public way to replace the command list without
+    # re-validating it against the prepared nodes, so write the private field.
     new_pat._Pattern__seq = new_seq
     if return_metadata:
         return new_pat, {

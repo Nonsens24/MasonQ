@@ -1,68 +1,99 @@
-import os
-import tempfile
+"""Measurement angles for an aligned brick matrix, and the Graphix pattern.
+
+Each brick cell becomes four measured graph nodes. Rotation cells are read
+off as an `Rz Rx Rz` Euler triple, CX cells use the fixed angle tables of
+the brickwork CX gadget, and empty cells are identity bricks.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, Mapping
 
 import numpy as np
+from graphix.measurements import Measurement
+from graphix.opengraph import OpenGraph
+from graphix.pattern import Pattern
+from qiskit.synthesis import OneQubitEulerDecomposer
 
-generate_from_graph = None
+from .cx_tags import cx_group_id, cx_role, is_cx_endpoint
 
-
-def _prepare_graphix_runtime() -> None:
-    """Make Graphix's optional simulation stack import reliably in conda envs."""
-    os.environ.setdefault(
-        "NUMBA_CACHE_DIR",
-        os.path.join(tempfile.gettempdir(), "masonq-numba-cache"),
-    )
-    os.environ.setdefault(
-        "MPLCONFIGDIR",
-        os.path.join(tempfile.gettempdir(), "masonq-mpl-cache"),
-    )
-    os.environ.setdefault(
-        "XDG_CACHE_HOME",
-        os.path.join(tempfile.gettempdir(), "masonq-cache"),
-    )
-
-
-def _generate_from_graph(structure_graph, angles, inputs, outputs):
-    """Import Graphix lazily so package imports do not require simulator setup."""
-    global generate_from_graph
-    if generate_from_graph is None:
-        _prepare_graphix_runtime()
-        try:
-            from graphix import generate_from_graph as graphix_generate_from_graph
-        except ImportError:
-            from graphix.measurements import Measurement
-            from graphix.opengraph import OpenGraph
-
-            def graphix_generate_from_graph(graph, angle_map, input_nodes, output_nodes):
-                output_set = set(output_nodes)
-                measurements = {
-                    node: Measurement.XY(angle)
-                    for node, angle in angle_map.items()
-                    if node not in output_set
-                }
-                return OpenGraph(
-                    graph=graph,
-                    input_nodes=list(input_nodes),
-                    output_nodes=list(output_nodes),
-                    measurements=measurements,
-                ).to_pattern()
-
-        generate_from_graph = graphix_generate_from_graph
-    return generate_from_graph(structure_graph, angles, inputs, outputs)
+_ZXZ_DECOMPOSER = OneQubitEulerDecomposer("ZXZ")
+# Cells already in the brick's Rz-Rx-Rz form (or a sub-sequence of it that the
+# slot assignment in `parse_euler_angles` reads off correctly).
+_DIRECT_EULER_FORMS = frozenset(
+    {("rz",), ("rx",), ("rz", "rx"), ("rx", "rz"), ("rz", "rx", "rz")}
+)
+# Measurement angles of the two-row CX bricks, in units of pi: four angles for
+# the top row and four for the row below it. "CXtt" has the target on top,
+# "CXct" the control.
+_CX_BRICK_ANGLES = {
+    "CXtt": ((0.0, 0.5, 0.0, -0.5), (0.0, 0.0, 0.5, 0.0)),
+    "CXct": ((0.0, 0.0, 0.5, 0.0), (0.0, 0.5, 0.0, -0.5)),
+}
+_BRICK_COLOURS = {
+    "id": "lightblue",
+    "euler_rot": "lightgreen",
+    "CXtt": "lightsalmon",
+    "CXct": "lightcoral",
+}
 
 
-def _cx_group_id(name: str) -> str:
-    return name[2:-1]
+def generate_from_graph(
+    structure_graph: Any,
+    angles: Mapping[Any, float],
+    inputs: Iterable[Any],
+    outputs: Iterable[Any],
+) -> Pattern:
+    """Build a Graphix pattern from a graph and XY-plane measurement angles (units of pi)."""
+    output_nodes = list(outputs)
+    output_set = set(output_nodes)
+    measurements = {
+        node: Measurement.XY(angle) for node, angle in angles.items() if node not in output_set
+    }
+    return OpenGraph(
+        graph=structure_graph,
+        input_nodes=list(inputs),
+        output_nodes=output_nodes,
+        measurements=measurements,
+    ).to_pattern()
+
+
+def _cell_unitary(cell):
+    """Return the 2x2 unitary of a single-qubit cell, gates applied in list order."""
+    unitary = np.eye(2, dtype=complex)
+    for instr in cell:
+        if instr.name == "id":
+            continue
+        half = float(instr.params[0]) / 2
+        c, s = np.cos(half), np.sin(half)
+        if instr.name == "rz":
+            gate = np.array([[c - 1j * s, 0], [0, c + 1j * s]])
+        elif instr.name == "rx":
+            gate = np.array([[c, -1j * s], [-1j * s, c]])
+        else:
+            raise AssertionError(f"Unsupported instruction in rotation brick: {instr.name!r}")
+        unitary = gate @ unitary
+    return unitary
 
 
 def parse_euler_angles(cell):
-    """Map a cell's local Qiskit Euler rotations to four brick measurements.
+    """Map a cell's single-qubit rotations to four brick measurements.
 
     The Qiskit basis entering this function is restricted to `rz` and `rx`.
     A single brick represents the sequence `Rz(a) Rx(b) Rz(c)` plus the final
-    teleportation measurement. Angles are negated because Graphix uses the
-    opposite measurement-angle convention from the circuit convention used here.
+    teleportation measurement. Cells already in that form are read off
+    directly. Any other sequence -- Qiskit can emit the equivalent `Rx Rz Rx`
+    Euler form -- is multiplied out and re-expressed as one exact Z-X-Z triple,
+    which is always possible because a product of `rz`/`rx` rotations is a
+    single SU(2) element up to global phase. Angles are negated because Graphix
+    uses the opposite measurement-angle convention from the circuit convention
+    used here.
     """
+
+    if tuple(instr.name for instr in cell) not in _DIRECT_EULER_FORMS:
+        theta, phi, lam = _ZXZ_DECOMPOSER.angles(_cell_unitary(cell))
+        # U = Rz(phi) Rx(theta) Rz(lam): lam acts first, phi last.
+        return [-lam / np.pi, -theta / np.pi, -phi / np.pi, 0.0]
 
     rotations = [0.0, 0.0, 0.0, 0.0]
     index = 0
@@ -72,7 +103,7 @@ def parse_euler_angles(cell):
         if instr.name == "rz":
             if index != 0 and index != 2:
                 raise AssertionError(
-                    f"Index wrong: {index}, instuction: {instr}\n "
+                    f"Index wrong: {index}, instruction: {instr}\n "
                     f"Probably shifted cx into a rotation brick"
                 )
             rotations[index] = -float(instr.params[0]) / np.pi
@@ -84,98 +115,30 @@ def parse_euler_angles(cell):
 
 
 def inject_angles(angles, brick_type, r, c, cell, node_colours):
+    """Write the measurement angles and colour of one brick at row `r`, column `c`.
 
+    `angles` and `node_colours` map graph nodes `(row, graph_column)` to a
+    value; CX bricks fill two rows, the other brick types one.
+    """
     if brick_type == "id":
-        angles.update(
-            {
-                (r, (c * 4) + 0): 0.0,
-                (r, (c * 4) + 1): 0.0,
-                (r, (c * 4) + 2): 0.0,
-                (r, (c * 4) + 3): 0.0,
-            }
-        )
-        node_colours.update(
-            {
-                (r, (c * 4) + 0): "lightblue",
-                (r, (c * 4) + 1): "lightblue",
-                (r, (c * 4) + 2): "lightblue",
-                (r, (c * 4) + 3): "lightblue",
-            }
-        )
+        rows = ((0.0, 0.0, 0.0, 0.0),)
     elif brick_type == "euler_rot":
-        local_angles = parse_euler_angles(cell)
-        angles.update(
-            {
-                (r, (c * 4) + 0): local_angles[0],
-                (r, (c * 4) + 1): local_angles[1],
-                (r, (c * 4) + 2): local_angles[2],
-                (r, (c * 4) + 3): local_angles[3],
-            }
-        )
-        node_colours.update(
-            {
-                (r, (c * 4) + 0): "lightgreen",
-                (r, (c * 4) + 1): "lightgreen",
-                (r, (c * 4) + 2): "lightgreen",
-                (r, (c * 4) + 3): "lightgreen",
-            }
-        )
-    # CX target top
-    elif brick_type == "CXtt":
-        angles.update({
-            (r, (c * 4) + 0): 0.0,
-            (r, (c * 4) + 1): 1 / 2,
-            (r, (c * 4) + 2): 0.0,
-            (r, (c * 4) + 3): -1 / 2,
-
-            (r + 1, (c * 4) + 0): 0.0,
-            (r + 1, (c * 4) + 1): 0.0,
-            (r + 1, (c * 4) + 2): 1 / 2,
-            (r + 1, (c * 4) + 3): 0.0,
-        })
-        node_colours.update({
-            (r, (c * 4) + 0): "LightSalmon",
-            (r, (c * 4) + 1): "LightSalmon",
-            (r, (c * 4) + 2): "LightSalmon",
-            (r, (c * 4) + 3): "LightSalmon",
-
-            (r + 1, (c * 4) + 0): "LightSalmon",
-            (r + 1, (c * 4) + 1): "LightSalmon",
-            (r + 1, (c * 4) + 2): "LightSalmon",
-            (r + 1, (c * 4) + 3): "LightSalmon",
-        })
-    # CX target bottom
-    elif brick_type == "CXct":
-        angles.update({
-            (r, (c * 4) + 0): 0.0,
-            (r, (c * 4) + 1): 0.0,
-            (r, (c * 4) + 2): 1 / 2,
-            (r, (c * 4) + 3): 0.0,
-
-            (r + 1, (c * 4) + 0): 0.0,
-            (r + 1, (c * 4) + 1): 1 / 2,
-            (r + 1, (c * 4) + 2): 0.0,
-            (r + 1, (c * 4) + 3): -1 / 2,
-        })
-        node_colours.update({
-            (r, (c * 4) + 0): "lightcoral",
-            (r, (c * 4) + 1): "lightcoral",
-            (r, (c * 4) + 2): "lightcoral",
-            (r, (c * 4) + 3): "lightcoral",
-
-            (r + 1, (c * 4) + 0): "lightcoral",
-            (r + 1, (c * 4) + 1): "lightcoral",
-            (r + 1, (c * 4) + 2): "lightcoral",
-            (r + 1, (c * 4) + 3): "lightcoral",
-        })
+        rows = (tuple(parse_euler_angles(cell)),)
+    elif brick_type in _CX_BRICK_ANGLES:
+        rows = _CX_BRICK_ANGLES[brick_type]
     else:
-        raise AssertionError(f"Unknown brick type: {brick_type} instuction type: {cell}")
+        raise AssertionError(f"Unknown brick type: {brick_type} instruction type: {cell}")
+
+    colour = _BRICK_COLOURS[brick_type]
+    for row_offset, row_angles in enumerate(rows):
+        for k, angle in enumerate(row_angles):
+            node = (r + row_offset, 4 * c + k)
+            angles[node] = angle
+            node_colours[node] = colour
 
 
 def _cell_cx_endpoint(cell):
-    endpoints = [
-        instr for instr in cell if instr.name.startswith("cx") and instr.name[-1:] in {"c", "t"}
-    ]
+    endpoints = [instr for instr in cell if is_cx_endpoint(instr.name)]
     if not endpoints:
         return None
     if len(endpoints) != len(cell):
@@ -191,8 +154,8 @@ def _index_cx_groups_by_column(instruction_matrix):
         groups = {}
         for r in range(num_rows):
             for instr in instruction_matrix[r][c]:
-                if instr.name.startswith("cx") and instr.name[-1:] in {"c", "t"}:
-                    groups.setdefault(_cx_group_id(instr.name), []).append((r, instr.name[-1]))
+                if is_cx_endpoint(instr.name):
+                    groups.setdefault(cx_group_id(instr.name), []).append((r, cx_role(instr.name)))
         groups_by_col.append(groups)
     return groups_by_col
 
@@ -203,6 +166,9 @@ def to_pattern(instruction_matrix, structure_graph):
     CX bricks are two-row gadgets. We resolve each CX group explicitly and
     inject it only from its top row so the angle table is independent of whether
     the control or target endpoint appears first in row-major iteration.
+
+    The pattern has no input nodes: every graph qubit starts in |+>, as in
+    universal blind quantum computation, so the pattern computes U|+...+>.
     """
 
     num_qubits = len(instruction_matrix)
@@ -240,7 +206,7 @@ def to_pattern(instruction_matrix, structure_graph):
                 )
                 continue
 
-            gid = _cx_group_id(cx_endpoint.name)
+            gid = cx_group_id(cx_endpoint.name)
             if gid in placed_cx_groups:
                 continue
 
@@ -267,9 +233,9 @@ def to_pattern(instruction_matrix, structure_graph):
             )
             placed_cx_groups.add(gid)
 
-    inputs = []  # Initialise to the |+> state as with ubqc
+    inputs = []  # No input nodes: every qubit is prepared in |+>, as in UBQC.
     outputs = [(i, (num_cols * 4)) for i in range(num_qubits)]
 
-    brickwork_pattern = _generate_from_graph(structure_graph, angles, inputs, outputs)
+    brickwork_pattern = generate_from_graph(structure_graph, angles, inputs, outputs)
 
     return brickwork_pattern, node_colours

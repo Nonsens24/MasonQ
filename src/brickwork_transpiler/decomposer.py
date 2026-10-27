@@ -1,51 +1,41 @@
+"""Circuit lowering, brick scheduling and CX alignment.
+
+Stages, in pipeline order:
+
+1. `selective_decompose` and `linearise_multi_ctrl` prepare the circuit;
+2. `decompose_qc_to_bricks_qiskit` lets Qiskit lower it to `rz`/`rx`/`cx`
+   on a line coupling map;
+3. `instructions_to_matrix_dag` schedules the result into a per-qubit,
+   per-column instruction matrix;
+4. `align_bricks` moves the CX bricks to parity-compatible columns and
+   re-attaches the rotations next to them.
+"""
+
+from __future__ import annotations
+
 import heapq
 import logging
 from collections import Counter, defaultdict
 from math import pi
-from qiskit.circuit.instruction import Instruction
-from typing import Dict, List, Optional, Tuple
 
 from qiskit import AncillaRegister, transpile
 from qiskit.circuit import QuantumCircuit, Qubit
+from qiskit.circuit.instruction import Instruction
 from qiskit.circuit.library import MCXGate, PhaseGate
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit.dagnode import DAGOpNode
 from qiskit.transpiler import CouplingMap
 
-try:
-    from qiskit.transpiler.passes import HLSConfig
-except ImportError:  # Qiskit 0.46 compatibility.
-    from qiskit.transpiler.passes.synthesis import HLSConfig
+from .cx_tags import cx_group_id, is_cx_endpoint, tag_cx
 
 try:
     from qiskit.circuit.library import MCXRecursive
-except ImportError:  # Current Qiskit prefers high-level synthesis for MCX.
+except ImportError:  # Removed in Qiskit 3.0; only the legacy-recursive strategy uses it.
     MCXRecursive = None
 
 logger = logging.getLogger(__name__)
 
-Matrix = List[List[List[Instruction]]]
-
-
-def _is_cx_endpoint(name: str) -> bool:
-    """True iff `name` is a tagged CX endpoint produced by `instructions_to_matrix_dag`.
-
-    Tagged endpoints are `cx{id}c` for the control row and `cx{id}t` for the
-    target row. A literal `cx` from raw Qiskit (no id, no role suffix) does
-    NOT match — the alignment / placement passes never expect to see one.
-    """
-    return (
-        len(name) > 3
-        and name[0] == "c"
-        and name[1] == "x"
-        and name[-1] in ("c", "t")
-        and name[2:-1].isdigit()
-    )
-
-
-def _cx_group_id(name: str) -> str:
-    """Return the CX group id from a tagged endpoint name."""
-    return name[2:-1]
+Matrix = list[list[list[Instruction]]]
 
 
 # -------------------------------------------------------------------
@@ -107,7 +97,7 @@ def _mcx_qargs_for_strategy(ctrls, target, scratch_anc, strategy: str):
 
 
 def _is_multi_control_phase(inst: Instruction, qarg_count: int) -> bool:
-    return inst.name.lower() in ("mcu1", "mcphase", "cp", "cphase") and qarg_count > 2
+    return inst.name.lower() in ("mcu1", "mcphase") and qarg_count > 2
 
 
 def _required_explicit_ancillas(qc: QuantumCircuit, strategy: str) -> int:
@@ -193,7 +183,7 @@ def linearise_multi_ctrl(
             )
 
         # ---------- MCU1 / MCPhase (>1 control) ----------
-        elif inst.name.lower() in ("mcu1", "mcphase") and len(qargs) > 2:
+        elif _is_multi_control_phase(inst, len(qargs)):
             theta = float(inst.params[0]) % (2 * pi)
             ctrls, target = qargs[:-1], qargs[-1]
             k = len(ctrls)
@@ -230,9 +220,9 @@ def linearise_multi_ctrl(
 
 def compute_brick_distances(
     qc: QuantumCircuit,
-    row_map: Optional[Dict[Qubit, int]] = None,
+    row_map: dict[Qubit, int] | None = None,
     ignore_1q: bool = True,
-) -> Tuple[Dict[int, int], List[int], Dict[str, int]]:
+) -> tuple[dict[int, int], list[int], dict[str, int]]:
     """
     Compute:
       - H(d): histogram of vertical row separations d for multi-qubit ops
@@ -257,7 +247,7 @@ def compute_brick_distances(
 
     dag = circuit_to_dag(qc)
     hist = Counter()
-    dmax_per_col: List[int] = []
+    dmax_per_col: list[int] = []
 
     # Qiskit DAG layers: each item is {'graph': DAGCircuit,...}
     for layer in dag.layers():
@@ -295,18 +285,33 @@ def compute_brick_distances(
     return hist_dict, dmax_per_col, stats
 
 
+def _log_brick_distances(label: str, qc: QuantumCircuit) -> None:
+    """INFO-level diagnostics on the row spans of the multi-qubit gates in `qc`."""
+    if not logger.isEnabledFor(logging.INFO):
+        return
+    hist, dmax_per_col, stats = compute_brick_distances(qc)
+    logger.info("%s gate counts: %s", label, qc.count_ops())
+    logger.info("%s distance histogram H(d): %s", label, hist)
+    logger.info("%s d_max per column preview: %s", label, dmax_per_col[:10])
+    logger.info(
+        "%s max d: %s, avg d: %.3f, columns: %s, brick-depth estimate: %s",
+        label,
+        stats["max_d"],
+        stats["avg_d"],
+        stats["num_columns"],
+        stats["brick_depth_est"],
+    )
+
+
 def decompose_qc_to_bricks_qiskit(
     qc: QuantumCircuit,
     opt: int = 3,
-    draw: bool = False,
-    routing_method: str = "basic",
-    layout_method: str = "trivial",
-    file_writer=None,
+    routing_method: str | None = "basic",
+    layout_method: str | None = "trivial",
     with_ancillas: bool = True,
-    verbose: bool = False,
     multi_control_strategy: str = "hls",
     fallback_opt: int | None = 1,
-):
+) -> QuantumCircuit:
     """Decompose `qc` into the brickwork-compatible basis on a line coupling.
 
     Steps:
@@ -319,36 +324,12 @@ def decompose_qc_to_bricks_qiskit(
          `fallback_opt` (when not `None`), since high-`opt` synthesis can hit
          numerical edge cases on borderline matrices.
 
-    The `verbose` flag is accepted for API symmetry with `transpile(...)`,
-    which configures package-wide logging when set. This function does not
-    mutate the module-wide logger; pass `verbose=True` to the public
-    `transpile(...)` entry point or call `logging.basicConfig(...)` to see
-    the INFO-level diagnostics emitted below.
+    Diagnostics go to this module's logger at INFO level.
     """
-    del verbose  # see docstring; verbosity is configured at the transpile entry point.
+    _log_brick_distances("Original circuit:", qc)
 
-    logger.info("Original gate counts: %s", qc.count_ops())
-
-    # BEFORE selective_decompose:
-    H0, dmax_cols0, stats0 = compute_brick_distances(qc)  # <— use qc, not qc_sel
-    logger.info("Original distance histogram H(d): %s", H0)
-    logger.info("Original d_max per column preview: %s", dmax_cols0[:10])
-    logger.info("Original brick-depth estimate: %s", stats0["brick_depth_est"])
-
-    # ---- Non-decomposed (logical) circuit ----
     qc_sel = selective_decompose(qc)
-    logger.info("Selectively decomposed gate counts: %s", qc_sel.count_ops())
-
-    # Distance metrics on the *logical* circuit
-    H_logical, dmax_cols_logical, stats_logical = compute_brick_distances(qc_sel)
-    logger.info("Logical distance histogram H(d): %s", H_logical)
-    logger.info("Logical max d over columns: %s", stats_logical["max_d"])
-    logger.info("Logical avg d: %.3f", stats_logical["avg_d"])
-    logger.info("Logical columns: %s", stats_logical["num_columns"])
-    logger.info("Logical brick-depth estimate: %s", stats_logical["brick_depth_est"])
-
-    if file_writer:
-        file_writer.set("d_avg", stats_logical["avg_d"])
+    _log_brick_distances("Selectively decomposed circuit:", qc_sel)
 
     if with_ancillas:
         qc_lin = linearise_multi_ctrl(
@@ -356,11 +337,8 @@ def decompose_qc_to_bricks_qiskit(
             multi_control_strategy=multi_control_strategy,
         )
         logger.info("After multi-control linearisation: %s", qc_lin.count_ops())
-
     else:
         qc_lin = qc_sel
-
-    hls_cfg = HLSConfig()
 
     # simple line-coupling (up and down)
     basis = ["rz", "rx", "cx", "id"]
@@ -373,10 +351,12 @@ def decompose_qc_to_bricks_qiskit(
         else None
     )
 
-    logger.info("Qiskit transpile optimisation level: %s", opt)
-    logger.info("Qiskit layout method: %s", layout_method)
-    logger.info("Qiskit routing method: %s", routing_method)
-    logger.info("Transpiling with Qiskit...")
+    logger.info(
+        "Transpiling with Qiskit: optimisation level %s, layout %s, routing %s",
+        opt,
+        layout_method,
+        routing_method,
+    )
     try:
         qc_final = transpile(
             qc_lin,
@@ -384,14 +364,12 @@ def decompose_qc_to_bricks_qiskit(
             coupling_map=coupling,
             layout_method=layout_method,
             routing_method=routing_method,
-            hls_config=hls_cfg,
             optimization_level=opt,  # 3 for consistent merging of single qubit gates
         )
-
     except Exception as e:
         if fallback_opt is None:
             raise
-        logger.info(
+        logger.warning(
             "Qiskit transpile with optimisation_level=%s failed; retrying with "
             "optimisation_level=%s. This usually indicates a numerical issue in "
             "Qiskit's high-optimisation synthesis path, not necessarily an invalid "
@@ -406,25 +384,10 @@ def decompose_qc_to_bricks_qiskit(
             coupling_map=coupling,
             layout_method=layout_method,
             routing_method=routing_method,
-            hls_config=hls_cfg,
             optimization_level=fallback_opt,
         )
 
-    if draw:
-        from matplotlib import pyplot as plt
-
-        logger.info("Drawing decomposed circuit...")
-        qc_final.draw(output="mpl", fold=40, style="iqp")
-        plt.savefig(f"images/Circuits/Decomposed_hhl_circ.png", dpi=300, bbox_inches="tight")
-        plt.show()
-
     logger.info("Post-HLS/transpile gate counts: %s", qc_final.count_ops())
-
-    if file_writer:
-        file_writer.set("decomposed_depth", qc_final.depth())
-        file_writer.set("num_gates_transpiled", sum(qc_final.count_ops().values()))
-        file_writer.set("num_gates_original", sum(qc_sel.count_ops().values()))
-
     return qc_final
 
 
@@ -463,7 +426,6 @@ def group_with_dag_atomic_mixed(qc: QuantumCircuit):
         if indeg[n] == 0:
             push_ready(n)
 
-    scheduled = set()
     columns = []
 
     while ready_rot or ready_cx:  # until every op scheduled
@@ -473,7 +435,6 @@ def group_with_dag_atomic_mixed(qc: QuantumCircuit):
         while ready_rot:
             _, node = heapq.heappop(ready_rot)
             col_nodes.append(node)
-            scheduled.add(node)
 
             for suc in succs[node]:
                 indeg[suc] -= 1
@@ -497,7 +458,6 @@ def group_with_dag_atomic_mixed(qc: QuantumCircuit):
             # schedule this CX
             col_nodes.append(node)
             busy.update(qidx)
-            scheduled.add(node)
 
             for suc in succs[node]:
                 indeg[suc] -= 1
@@ -544,10 +504,10 @@ def instructions_to_matrix_dag(qc: QuantumCircuit):
                 for q in qargs:
                     instr_mut = instr.to_mutable()
                     if control_qubit:
-                        instr_mut.name = f"cx{cx_idx}c"
+                        instr_mut.name = tag_cx(cx_idx, "c")
                         control_qubit = False
                     else:
-                        instr_mut.name = f"cx{cx_idx}t"
+                        instr_mut.name = tag_cx(cx_idx, "t")
                     cx_matrix[qubit_index[q]][c_idx].append(instr_mut)
                     matrix[qubit_index[q]][c_idx].append(instr_mut)
                 cx_idx += 1
@@ -562,7 +522,7 @@ def instructions_to_matrix_dag(qc: QuantumCircuit):
 
 def align_cx_matrix(
     cx_matrix: Matrix,
-    orig_matrix: Optional[Matrix] = None,
+    orig_matrix: Matrix | None = None,
 ) -> Matrix:
     """Move CX endpoints to parity-compatible brick columns.
 
@@ -600,13 +560,13 @@ def align_cx_matrix(
     n_cols = max((len(r) for r in cx_matrix), default=0)
 
     # ---- 1) Discover CX groups: rows touched and earliest original column ---
-    group_info: Dict[str, Dict] = {}
+    group_info: dict[str, dict] = {}
     for r in range(n_rows):
         row = cx_matrix[r]
         for c in range(min(n_cols, len(row))):
             for instr in row[c]:
-                if _is_cx_endpoint(instr.name):
-                    gid = _cx_group_id(instr.name)
+                if is_cx_endpoint(instr.name):
+                    gid = cx_group_id(instr.name)
                     info = group_info.get(gid)
                     if info is None:
                         group_info[gid] = {"rows": [r], "orig_col": c}
@@ -630,14 +590,14 @@ def align_cx_matrix(
     bricks.sort(key=lambda b: (b["orig_col"], int(b["gid"]), b["top"]))
 
     # ---- 1b) Per-row sorted list of original columns containing rotations --
-    rot_cols_per_row: List[List[int]] = [[] for _ in range(n_rows)]
+    rot_cols_per_row: list[list[int]] = [[] for _ in range(n_rows)]
     if orig_matrix is not None:
         for r in range(min(n_rows, len(orig_matrix))):
             row = orig_matrix[r]
             for c, cell in enumerate(row):
                 has_rot = False
                 for instr in cell:
-                    if not _is_cx_endpoint(instr.name):
+                    if not is_cx_endpoint(instr.name):
                         has_rot = True
                         break
                 if has_rot:
@@ -652,7 +612,7 @@ def align_cx_matrix(
     used_width = 0  # inclusive max column index actually written
 
     # row -> (last placed column, original column of that brick)
-    row_last_placed: Dict[int, Tuple[int, int]] = {}
+    row_last_placed: dict[int, tuple[int, int]] = {}
 
     for brick in bricks:
         gid = brick["gid"]
@@ -710,8 +670,8 @@ def align_cx_matrix(
             instrs = [
                 instr
                 for instr in cell
-                if _is_cx_endpoint(instr.name)
-                and _cx_group_id(instr.name) == gid
+                if is_cx_endpoint(instr.name)
+                and cx_group_id(instr.name) == gid
             ]
             aligned[r][place] = list(aligned[r][place]) + instrs
             row_last_placed[r] = (place, ocol)
@@ -727,7 +687,7 @@ def align_cx_matrix(
     return aligned
 
 
-def insert_rotations_adjecant_to_cx(
+def insert_rotations_adjacent_to_cx(
     aligned_cx: Matrix,
     original: Matrix,
 ) -> Matrix:
@@ -741,7 +701,14 @@ def insert_rotations_adjecant_to_cx(
       CX (`place_cx + 1`);
     - else if the original right neighbour is a CX, place just before it
       (`max(place_cx - 1, 0)`);
-    - otherwise place in the leading all-rotation column (column 0).
+    - otherwise place just after the nearest preceding CX on the same row, or
+      in the leading column (column 0) if the row has no CX before it.
+
+    With the rotation-aware floor of `align_cx_matrix` every destination is
+    free of CX endpoints and per-row operation order is preserved for any
+    row-isolated input. The DAG scheduler additionally keeps each run of
+    single-qubit gates in the cell right after its preceding CX, so in the
+    compiled pipeline the adjacent-cell cases always apply.
 
     This is intentionally conservative. It avoids commuting rotations through
     CX gates, which would be a circuit optimisation and requires separate
@@ -761,12 +728,12 @@ def insert_rotations_adjecant_to_cx(
     new_mat: Matrix = [[list(cell) for cell in row] for row in aligned_cx]
 
     # Per-row lookup: CX endpoint instruction name -> aligned column.
-    cx_col: List[Dict[str, int]] = []
+    cx_col: list[dict[str, int]] = []
     for row in new_mat:
-        lookup: Dict[str, int] = {}
+        lookup: dict[str, int] = {}
         for c, cell in enumerate(row):
             for ins in cell:
-                if _is_cx_endpoint(ins.name) and ins.name not in lookup:
+                if is_cx_endpoint(ins.name) and ins.name not in lookup:
                     lookup[ins.name] = c
         cx_col.append(lookup)
 
@@ -785,21 +752,21 @@ def insert_rotations_adjecant_to_cx(
         lookup = cx_col[i]
 
         for j, cell in enumerate(row_orig):
-            rots = [ins for ins in cell if not _is_cx_endpoint(ins.name)]
+            rots = [ins for ins in cell if not is_cx_endpoint(ins.name)]
             if not rots:
                 continue
 
-            left_dest: Optional[int] = None
+            left_dest: int | None = None
             if j > 0:
                 for ins in row_orig[j - 1]:
-                    if _is_cx_endpoint(ins.name):
+                    if is_cx_endpoint(ins.name):
                         left_dest = lookup[ins.name] + 1
                         break
 
-            right_dest: Optional[int] = None
+            right_dest: int | None = None
             if j + 1 < len(row_orig):
                 for ins in row_orig[j + 1]:
-                    if _is_cx_endpoint(ins.name):
+                    if is_cx_endpoint(ins.name):
                         right_dest = max(lookup[ins.name] - 1, 0)
                         break
 
@@ -807,7 +774,7 @@ def insert_rotations_adjecant_to_cx(
             # CX endpoint on this row. The aligner reserves a rotation slot
             # next to every CX that has rotations, so at least one side is
             # safe; if both sides are safe, prefer left (legacy behaviour).
-            candidates: List[int] = []
+            candidates: list[int] = []
             for cand in (left_dest, right_dest):
                 if cand is None:
                     continue
@@ -815,7 +782,7 @@ def insert_rotations_adjecant_to_cx(
                     new_mat[i][cand] if cand < width else []
                 )
                 cand_clear = not any(
-                    _is_cx_endpoint(x.name) for x in cell_at_cand
+                    is_cx_endpoint(x.name) for x in cell_at_cand
                 )
                 if cand_clear:
                     candidates.append(cand)
@@ -826,7 +793,16 @@ def insert_rotations_adjecant_to_cx(
             elif right_dest is not None:
                 dest = right_dest
             else:
+                # No CX in either adjacent cell. Attach after the nearest
+                # preceding CX on this row so the rotation cannot move ahead
+                # of a CX it originally followed; a rotation that precedes
+                # every CX on its row goes to the leading column.
                 dest = 0
+                for jj in range(j - 2, -1, -1):
+                    prev = next((x for x in row_orig[jj] if is_cx_endpoint(x.name)), None)
+                    if prev is not None:
+                        dest = lookup[prev.name] + 1
+                        break
 
             if dest >= width:
                 _grow_to(dest + 1)
@@ -836,13 +812,7 @@ def insert_rotations_adjecant_to_cx(
     return new_mat
 
 
-def insert_rotations_adjacent_to_cx(aligned_cx: Matrix, original: Matrix) -> Matrix:
-    """Correctly spelled alias for `insert_rotations_adjecant_to_cx`."""
-    return insert_rotations_adjecant_to_cx(aligned_cx, original)
-
-
-def align_bricks(cx_mat, orig):
-    cx_mat_aligned = align_cx_matrix(cx_mat, orig_matrix=orig)
-    qc_mat_aligned = insert_rotations_adjacent_to_cx(cx_mat_aligned, orig)
-
-    return qc_mat_aligned
+def align_bricks(cx_mat: Matrix, orig: Matrix) -> Matrix:
+    """Align the CX bricks of `cx_mat`, then re-attach the rotations of `orig` next to them."""
+    aligned_cx = align_cx_matrix(cx_mat, orig_matrix=orig)
+    return insert_rotations_adjacent_to_cx(aligned_cx, orig)

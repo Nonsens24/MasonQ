@@ -150,7 +150,7 @@ def test_new_bound_is_monotone_improvement_over_legacy():
     `align_cx_matrix` (no rotation hint -> falls back to gap-preserving)
     produces the same width as the legacy formula. With a rotation hint
     it can only shrink."""
-    from brickwork_transpiler.decomposer import _is_cx_endpoint  # noqa: F401
+    from brickwork_transpiler.cx_tags import is_cx_endpoint  # noqa: F401
 
     class _I:
         def __init__(self, name):

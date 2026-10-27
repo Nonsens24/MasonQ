@@ -40,7 +40,9 @@ def test_transpile_return_result_does_not_simulate_automatically(monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("transpile(..., return_result=True) must not simulate automatically")
 
-    monkeypatch.setattr(Pattern, "simulate_pattern", fail_if_called)
+    for name in ("simulate", "simulate_pattern"):  # Graphix 0.4 renamed simulate_pattern
+        if hasattr(Pattern, name):
+            monkeypatch.setattr(Pattern, name, fail_if_called)
 
     qc = _small_circuit()
     result = transpile(qc, Statevector.from_label("+++"), return_result=True)
@@ -68,9 +70,8 @@ def test_return_stage_matrix_aliases_are_identical():
 
     matrix = transpile(qc, return_stage="matrix")
     instruction_matrix = transpile(qc, return_stage="instruction_matrix")
-    legacy_matrix = transpile(qc, return_mat=True)
 
-    assert matrix == instruction_matrix == legacy_matrix
+    assert matrix == instruction_matrix
 
 
 def test_return_stage_sparse_matrix_cell_api_and_resources_match():

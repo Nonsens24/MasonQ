@@ -14,8 +14,6 @@ This page keeps the product direction short and readable.
   practicality.
 - Better delegated-execution packaging, verification flows, and clearer trust
   reporting.
-- Clearer QHE mode options and guidance for when to use `off`, QOTP-style
-  protection, or heavier protection modes.
 - Clearer example-to-product paths across the docs and demos.
 
 ## Mid Term
@@ -28,20 +26,3 @@ This page keeps the product direction short and readable.
 ## Longer Term
 
 - Easier end-to-end orchestration for confidential quantum workflows.
-- Broader productisation of selective blindness plus verification as one user
-  experience.
-- Position MasonQ and VEIL as secure quantum execution infrastructure rather
-  than a research-only transpiler.
-
-## Product Direction
-
-The guiding principle stays simple:
-
-> Protect small, high-leverage quantum semantic regions inside mostly public
-> workflows.
-
-That is the strongest commercial path for selective blindness. For the broader
-strategic framing, see [VEIL / cloak opportunity catalogue](veil_opportunities.md).
-
-For related background, see the partial blind quantum computation paper:
-<https://arxiv.org/pdf/2503.10007>

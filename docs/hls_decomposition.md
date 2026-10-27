@@ -54,7 +54,8 @@ only the minimum needed to keep the brickwork pipeline well-defined:
 2. `linearise_multi_ctrl` rewrites only the multi-control cases that MasonQ
    needs to control before basis lowering.
 3. `decompose_qc_to_bricks_qiskit` calls Qiskit's `transpile(...)` with basis
-   gates `rz`, `rx`, `cx`, and `id`, a line coupling map, and an `HLSConfig`.
+   gates `rz`, `rx`, `cx`, and `id` and a line coupling map; Qiskit's default
+   high-level synthesis configuration lowers the remaining `MCXGate`s.
 
 After that, MasonQ schedules the resulting `rz`/`rx`/`cx` circuit into the
 brickwork instruction matrix.

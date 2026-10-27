@@ -1,7 +1,10 @@
+"""Public entry point: a Qiskit circuit in, a Graphix brickwork pattern out."""
+
 import logging
 from collections.abc import Callable
 
 from qiskit import QuantumCircuit
+
 from . import decomposer, graph_builder, pattern_converter
 from .progress import ProgressReporter
 from .resources import estimate_resources
@@ -15,18 +18,25 @@ from .validation import (
 
 logger = logging.getLogger(__name__)
 
+_STAGES = (
+    "decomposed_circuit",
+    "matrix",
+    "instruction_matrix",
+    "sparse_matrix",
+    "resources",
+    "graph_data",
+    "networkx_graph",
+)
+
 
 def transpile(
     qc: QuantumCircuit,
     input_vector=None,
-    routing_method=None,
-    layout_method=None,
-    return_mat: bool = False,
-    file_writer=None,
-    with_ancillas=True,
-    plot_decomposed: bool = False,
-    opt=3,
-    verbose: bool = False,
+    *,
+    routing_method: str | None = None,
+    layout_method: str | None = None,
+    with_ancillas: bool = True,
+    opt: int = 3,
     multi_control_strategy: str = "hls",
     fallback_opt: int | None = 1,
     validate: bool = True,
@@ -36,31 +46,20 @@ def transpile(
 ):
     """Transpile a Qiskit circuit into a Graphix brickwork pattern.
 
+    The pattern prepares every qubit in |+>, so it computes U|+...+>.
+    `input_vector` is only stored on the result as the reference input of
+    `verify()`; leave it `None` (the default, |+>^n) unless you want to be
+    explicit.
+
     The default return value is the historical tuple
     `(pattern, colour_map, decomposed_circuit)`. Set `return_result=True` for a
     named `TranspileResult`. Use `return_stage` to stop at an intermediate
-    representation such as `"decomposed_circuit"`, `"matrix"`, `"resources"`,
-    `"sparse_matrix"`, `"graph_data"`, or `"networkx_graph"`.
+    representation: `"decomposed_circuit"`, `"matrix"`, `"sparse_matrix"`,
+    `"resources"`, `"graph_data"` or `"networkx_graph"`.
     """
-    if verbose:
-        logging.basicConfig(level=logging.INFO)
-    if return_mat:
-        return_stage = "matrix"
-    valid_stages = {
-        None,
-        "decomposed_circuit",
-        "matrix",
-        "instruction_matrix",
-        "sparse_matrix",
-        "resources",
-        "graph_data",
-        "networkx_graph",
-    }
-    if return_stage not in valid_stages:
+    if return_stage is not None and return_stage not in _STAGES:
         raise ValueError(
-            "return_stage must be one of None, 'decomposed_circuit', 'matrix', "
-            "'instruction_matrix', 'sparse_matrix', 'resources', 'graph_data', "
-            "or 'networkx_graph'."
+            "return_stage must be None or one of: " + ", ".join(repr(s) for s in _STAGES) + "."
         )
     reporter = ProgressReporter(progress)
     reporter.emit(
@@ -79,10 +78,7 @@ def transpile(
             opt=opt,
             routing_method=routing_method,
             layout_method=layout_method,
-            file_writer=file_writer,
             with_ancillas=with_ancillas,
-            draw=plot_decomposed,
-            verbose=verbose,
             multi_control_strategy=multi_control_strategy,
             fallback_opt=fallback_opt,
         )
@@ -91,7 +87,6 @@ def transpile(
         return decomposed_qc
 
     logger.info("Creating instruction matrix from DAG...")
-    # Optimise Instruction matrix with dependency graph
     with reporter.step(
         "Building dependency-ordered instruction matrix.",
         "Instruction matrix built",
@@ -99,7 +94,6 @@ def transpile(
         qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed_qc)
 
     logger.info("Aligning instruction matrix...")
-    # Align gates according to brickwork topology
     with reporter.step("Aligning gates to brickwork columns.", "Brickwork alignment complete"):
         qc_mat_aligned = decomposer.align_bricks(cx_mat, qc_mat)
         if validate:
@@ -116,7 +110,6 @@ def transpile(
         return estimate_resources(decomposed_qc, qc_mat_aligned)
 
     logger.info("Building graph structure...")
-    # Build the graph from the optimised and formatted instruction matrix
     with reporter.step("Building brickwork graph data.", "Brickwork graph data built"):
         bw_graph_data = graph_builder.generate_brickwork_graph_from_instruction_matrix(
             qc_mat_aligned
@@ -131,15 +124,13 @@ def transpile(
         reporter.emit("Returning graph data.")
         return bw_graph_data
 
-    # Get the networkx graph structure
     with reporter.step("Converting graph data to NetworkX graph.", "NetworkX graph built"):
         bw_nx_graph = graph_builder.to_networkx_graph(bw_graph_data)
     if return_stage == "networkx_graph":
         reporter.emit("Returning NetworkX graph.")
         return bw_nx_graph
 
-    # Add angles and convert to Graphix pattern
-    logger.info("Calculating measurement dependencies...")
+    logger.info("Calculating measurement angles and building the pattern...")
     with reporter.step("Converting graph to Graphix pattern.", "Graphix pattern built"):
         bw_pattern, col_map = pattern_converter.to_pattern(qc_mat_aligned, bw_nx_graph)
         if validate:

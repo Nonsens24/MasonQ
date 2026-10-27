@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from .cx_tags import cx_group_id, cx_role, is_cx_endpoint
 from .exceptions import BrickworkValidationError
 
 
@@ -41,7 +42,7 @@ def validate_instruction_matrix(matrix: list[list[list[Any]]]) -> None:
                     f"Matrix cell ({row_idx}, {col_idx}) must be a list."
                 )
             names = [_instruction_name(instr) for instr in cell]
-            has_cx = any(name.startswith("cx") and name[-1:] in {"c", "t"} for name in names)
+            has_cx = any(is_cx_endpoint(name) for name in names)
             if has_cx and len(cell) > 1:
                 raise BrickworkValidationError(
                     f"CX cell ({row_idx}, {col_idx}) must not contain extra operations: {cell!r}."
@@ -49,13 +50,8 @@ def validate_instruction_matrix(matrix: list[list[list[Any]]]) -> None:
             for name in names:
                 if name in {"rz", "rx", "id"}:
                     continue
-                if name.startswith("cx") and name[-1:] in {"c", "t"}:
-                    gid = name[2:-1]
-                    if not gid:
-                        raise BrickworkValidationError(
-                            f"CX instruction {name!r} at ({row_idx}, {col_idx}) has no id."
-                        )
-                    cx_locations[gid].append((row_idx, col_idx, name[-1]))
+                if is_cx_endpoint(name):
+                    cx_locations[cx_group_id(name)].append((row_idx, col_idx, cx_role(name)))
                     continue
                 raise BrickworkValidationError(
                     f"Unsupported instruction {name!r} at ({row_idx}, {col_idx})."

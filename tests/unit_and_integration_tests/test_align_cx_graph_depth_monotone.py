@@ -31,7 +31,7 @@ def _graph_node_count_legacy(qc: QuantumCircuit) -> int:
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed)
     # Force the legacy gap-preserving fallback by passing orig_matrix=None.
     cx_aligned = decomposer.align_cx_matrix(cx_mat, orig_matrix=None)
-    final = decomposer.insert_rotations_adjecant_to_cx(cx_aligned, qc_mat)
+    final = decomposer.insert_rotations_adjacent_to_cx(cx_aligned, qc_mat)
     bw = graph_builder.generate_brickwork_graph_from_instruction_matrix(final)
     return bw["height"] * bw["width"]
 

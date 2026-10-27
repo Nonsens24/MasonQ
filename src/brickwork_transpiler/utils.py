@@ -1,28 +1,22 @@
-"""Cross-cutting helpers used by the transpiler and result objects.
+"""Cross-cutting helpers used by the transpiler, the result objects and the tests.
 
 Three thematic groups live here:
 
-  - **State comparison** — `assert_equal_up_to_global_phase` compares two
-    statevectors up to a global phase, the canonical Qiskit-vs-Graphix check.
+  - **State comparison** — `state_overlap` and `assert_equal_up_to_global_phase`
+    compare two statevectors up to a global phase, the canonical
+    Qiskit-vs-Graphix check.
   - **Layout / output ordering** — utilities that translate between Qiskit's
     decomposed-circuit qubit order, Graphix's measurement-pattern output node
     order, and any ancilla padding the transpiler introduced.
   - **Reference-state construction** — `calculate_ref_state_from_qiskit_circuit`
     reproduces the post-Graphix output state from a Qiskit circuit so callers
     can verify pattern correctness.
-
-Anything that cannot be expressed in terms of the public Graphix / Qiskit
-APIs (e.g. layout introspection that depends on `transpiled_qc.layout`) is
-isolated here so the rest of the package can stay portable.
 """
 
 from __future__ import annotations
 
-import csv
 import logging
 import math
-import os
-from typing import Any, Iterable
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -37,27 +31,38 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def assert_equal_up_to_global_phase(state1, state2, tol: float = 1e-6) -> bool:
-    """Return True iff `state1` and `state2` are equal up to a global phase.
+def _as_vector(state) -> np.ndarray:
+    if isinstance(state, Statevector):
+        state = state.data
+    return np.asarray(state, dtype=complex).reshape(-1)
 
-    Both inputs are normalised first, then compared via inner-product
-    magnitude. An `AssertionError` is raised on failure with the diagnostic
-    inner product so the caller can interpret the size of the deviation.
+
+def state_overlap(state1, state2, *, tol: float = 1e-6) -> complex:
+    """Inner product of the two states after normalisation.
+
+    Its magnitude is 1 iff the states are equal up to a global phase. Raises
+    `ValueError` when either state has (numerically) zero norm.
     """
-    state1 = np.asarray(state1, dtype=complex)
-    state2 = np.asarray(state2, dtype=complex)
-
+    state1 = _as_vector(state1)
+    state2 = _as_vector(state2)
     norm1 = np.linalg.norm(state1)
     norm2 = np.linalg.norm(state2)
     if np.isclose(norm1, 0.0, atol=tol) or np.isclose(norm2, 0.0, atol=tol):
-        raise AssertionError("One of the states' norms is zero (cannot compare).")
+        raise ValueError("One of the states' norms is zero (cannot compare).")
+    return complex(np.vdot(state1 / norm1, state2 / norm2))
 
-    state1 = state1 / norm1
-    state2 = state2 / norm2
 
-    inner_product = np.vdot(state1, state2)
-    magnitude = float(np.abs(inner_product))
+def assert_equal_up_to_global_phase(state1, state2, tol: float = 1e-6) -> bool:
+    """Return True iff `state1` and `state2` are equal up to a global phase.
 
+    An `AssertionError` is raised on failure with the diagnostic inner
+    product so the caller can interpret the size of the deviation.
+    """
+    try:
+        inner_product = state_overlap(state1, state2, tol=tol)
+    except ValueError as exc:
+        raise AssertionError(str(exc)) from None
+    magnitude = abs(inner_product)
     if not np.isclose(magnitude, 1.0, atol=tol, rtol=0.0):
         raise AssertionError(
             "States are not equal up to global phase.\n"
@@ -96,18 +101,6 @@ def permute_qubits(circ: QuantumCircuit, perm: list[int]) -> QuantumCircuit:
     return new_circ
 
 
-def index_to_coordinates(index: int, num_cols: int) -> tuple[int, int]:
-    """Map a flat node index to `(row, column)` in row-major order."""
-    return divmod(index, num_cols)
-
-
-def map_indices_to_coordinates(
-    indices: Iterable[int], num_cols: int
-) -> dict[int, tuple[int, int]]:
-    """Map an iterable of flat node indices to `{index: (row, column)}`."""
-    return {i: index_to_coordinates(i, num_cols) for i in indices}
-
-
 def get_qubit_entries(bw_pattern):
     """Return the row indices of `bw_pattern.output_nodes` (Graphix order)."""
     if bw_pattern is None:
@@ -140,13 +133,6 @@ def get_qiskit_permutation(bw_pattern) -> list[int]:
     return [qubit_entries.index(j) for j in range(len(qubit_entries))]
 
 
-def permute_circuit_to_graphix_output_order(
-    circuit: QuantumCircuit, bw_pattern
-) -> QuantumCircuit:
-    """Return `circuit` with qubits permuted to Graphix output order."""
-    return permute_qubits(circuit, perm=get_qiskit_permutation(bw_pattern))
-
-
 # ---------------------------------------------------------------------------
 # Reference-state construction
 # ---------------------------------------------------------------------------
@@ -156,14 +142,15 @@ def calculate_ref_state_from_qiskit_circuit(
     bw_pattern,
     qc: QuantumCircuit,
     transpiled_qc: QuantumCircuit,
-    input_vector: Statevector,
+    input_vector,
 ) -> Statevector:
     """Reproduce the Graphix-pattern output state with a Qiskit reference.
 
     The transpiled circuit may have introduced ancilla qubits, so the input
     vector is padded with `|+>` on the high-index ancillas to match. The
     transpiled circuit is then permuted to Graphix output order and evolved
-    on the padded input.
+    on the padded input. `input_vector` may be a `Statevector` or any
+    array-like of amplitudes.
     """
     if bw_pattern is None:
         raise AssertionError("bw_pattern is None")
@@ -171,20 +158,21 @@ def calculate_ref_state_from_qiskit_circuit(
     extended_input_vector = pad_with_plus_for_transpiled(
         input_vector=input_vector, qc=qc, transpiled_qc=transpiled_qc
     )
-    logger.debug("Extended input vector dimension: %s", extended_input_vector.dim)
-
-    qc_perm = permute_circuit_to_graphix_output_order(transpiled_qc, bw_pattern)
+    qc_perm = permute_qubits(transpiled_qc, perm=get_qiskit_permutation(bw_pattern))
     return extended_input_vector.evolve(qc_perm)
 
 
 def pad_with_plus_for_transpiled(
-    input_vector: Statevector, qc: QuantumCircuit, transpiled_qc: QuantumCircuit
+    input_vector, qc: QuantumCircuit, transpiled_qc: QuantumCircuit
 ) -> Statevector:
     """Pad `input_vector` with `|+>` on each ancilla added by transpilation.
 
     Ancillas are placed on higher indices to match the Qiskit transpiler's
-    convention.
+    convention. A `Statevector` input is returned unchanged when no padding
+    is needed; other array-likes are converted first.
     """
+    if not isinstance(input_vector, Statevector):
+        input_vector = Statevector(np.asarray(input_vector, dtype=complex))
     n_in = qc.num_qubits
     n_tr = transpiled_qc.num_qubits
     if n_tr < n_in:
@@ -198,41 +186,7 @@ def pad_with_plus_for_transpiled(
 
 
 # ---------------------------------------------------------------------------
-# CSV buffering for benchmark scripts
-# ---------------------------------------------------------------------------
-
-
-class BufferedCSVWriter:
-    """Append-only CSV writer that accumulates a row in memory before flush.
-
-    Useful for benchmark scripts that produce many fields per run incrementally.
-    Calling `set` records a value; `flush` writes the buffered row and resets
-    the buffer. The header is written once when the file does not yet exist.
-    """
-
-    def __init__(self, filename: str | os.PathLike, headers: list[str]) -> None:
-        self.filename = os.fspath(filename)
-        self.headers = list(headers)
-        self.row: dict[str, Any] = {}
-        if not os.path.exists(self.filename):
-            with open(self.filename, mode="w", newline="") as fh:
-                writer = csv.DictWriter(fh, fieldnames=self.headers)
-                writer.writeheader()
-
-    def set(self, key: str, value: Any) -> None:
-        """Record a field for the row currently being built."""
-        self.row[key] = value
-
-    def flush(self) -> None:
-        """Append the buffered row (possibly partial) and reset the buffer."""
-        with open(self.filename, mode="a", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=self.headers, restval="")
-            writer.writerow(self.row)
-        self.row = {}
-
-
-# ---------------------------------------------------------------------------
-# Layout extraction (used by `result.py` for verification)
+# Layout extraction (used by the system tests)
 # ---------------------------------------------------------------------------
 
 

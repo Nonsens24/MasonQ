@@ -1,8 +1,7 @@
 # Limitations
 
-MasonQ is strongest as a transparent brickwork transpiler and a selective
-cloaking layer for compact sensitive subcircuits. This page describes the main
-practical boundaries.
+MasonQ is a transparent whole-circuit brickwork transpiler. This page describes
+the main practical boundaries.
 
 ## Stable Public Surface
 
@@ -10,7 +9,6 @@ The stable user-facing workflows are:
 
 - `transpile(..., return_result=True)`
 - `TranspileResult`
-- `brickwork_transpiler.cloak`
 
 Research helpers and algorithm-specific modules should be treated more
 cautiously unless the docs explicitly present them as stable.
@@ -35,14 +33,6 @@ The following are not part of the current stable surface:
 - heavy reset-based logic;
 - classical control integrated into the circuit definition.
 
-## Selective Cloaking Economics
-
-Cloak works best when the sensitive region is much smaller than the overall
-workflow. If most of the circuit must remain private, the cost profile trends
-toward full blind computation and the selective advantage drops.
-
-Use blind-share reporting to confirm that the hidden patch remains compact.
-
 ## Multi-Controlled Gates
 
 The default path is `multi_control_strategy="hls"`, which uses Qiskit's current
@@ -54,9 +44,13 @@ comparing equivalence, ancilla count, CX count, and brickwork depth.
 
 ## Graphix Compatibility
 
-MasonQ targets `graphix>=0.3.5,<0.4`. If Graphix changes pattern-generation or
-graph-extraction APIs again, compatibility updates will likely start in
-`pattern_converter.py` and related plotting or graph export code.
+MasonQ targets `graphix>=0.3.5,<0.5` and runs on both 0.3.5 and 0.4.x; the few
+methods Graphix 0.4 renamed (`simulate`, `to_opengraph`, `nodes`) are resolved at
+call time in `result.py`, `visualiser.py` and `bfk_encoder.py`. On Intel Macs pip
+stays on 0.3.5 because Graphix 0.4 needs a numba without Intel wheels; see
+[Dependency migration](dependency_migration.md). If Graphix changes
+pattern-generation or graph-extraction APIs again, compatibility updates will
+likely start in `pattern_converter.py` and related plotting or graph export code.
 
 ## Plotting
 
@@ -67,7 +61,8 @@ prefer saving to disk rather than interactive rendering.
 result.plot(save_path="images/graphs/circuit.pdf", show=False)
 ```
 
-## Experimental Modules
+## Research Circuits
 
-QRS and HHL helper modules remain research-oriented. Validate them carefully
-before using them in external claims, customer demos, or benchmark studies.
+The package no longer ships the QRS and HHL research circuits. `circuits.py`
+holds only the small fixtures used by the tests and examples; the paper
+scripts live outside the package.

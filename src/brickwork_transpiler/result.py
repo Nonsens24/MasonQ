@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import copy
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any, Iterator
 
 import numpy as np
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 
-from .resources import ResourceEstimate, estimate_resources
-from .progress import ProgressReporter
 from . import utils
+from .progress import ProgressReporter
+from .resources import ResourceEstimate, estimate_resources
 
 
 @dataclass(frozen=True)
@@ -37,12 +39,61 @@ class VerificationResult:
             )
 
 
+def _plus_state(num_qubits: int) -> Statevector:
+    return Statevector.from_label("+" * num_qubits)
+
+
+def _reference_input(state: Any, num_qubits: int) -> Statevector:
+    """Return the reference input as a `Statevector`; it must be |+>^n.
+
+    Brickwork patterns prepare every graph qubit in |+>, so the Graphix output
+    is always U|+...+>. `None` selects that state; anything else is checked
+    against it.
+    """
+    if state is None:
+        return _plus_state(num_qubits)
+    sv = state if isinstance(state, Statevector) else Statevector(np.asarray(state, dtype=complex))
+    if sv.num_qubits != num_qubits:
+        raise ValueError(
+            f"Input state has {sv.num_qubits} qubits but the circuit has {num_qubits}."
+        )
+    if not sv.equiv(_plus_state(num_qubits)):
+        raise ValueError(
+            "Brickwork patterns prepare every qubit in |+>, so the Graphix output is "
+            "U|+...+>. Pass no input state (the default) or |+>^n; to start from another "
+            "state, prepend the preparation gates to the circuit."
+        )
+    return sv
+
+
+def _simulate_pattern(pattern: Any, **kwargs: Any) -> Any:
+    """Run Graphix's simulator on `pattern`.
+
+    The method is `simulate` from Graphix 0.4 and `simulate_pattern` before.
+    """
+    run = getattr(pattern, "simulate", None) or pattern.simulate_pattern
+    return run(**kwargs)
+
+
+def _flat_statevector(state: Any) -> np.ndarray:
+    """Return a Graphix backend state as a flat complex NumPy vector."""
+    if hasattr(state, "to_statevector"):
+        return np.asarray(state.to_statevector(), dtype=complex)
+    if hasattr(state, "flatten"):
+        return np.asarray(state.flatten(), dtype=complex)
+    return np.asarray(state, dtype=complex).reshape(-1)
+
+
 @dataclass(frozen=True)
 class TranspileResult:
     """Result of converting a Qiskit circuit into a brickwork pattern.
 
     The object is iterable for compatibility with the historical tuple return:
     `pattern, colour_map, circuit = result`.
+
+    `input_state` is only used as the reference input of `verify()`. The
+    pattern itself always starts from |+>^n, so leave it `None` or pass that
+    state.
     """
 
     pattern: Any
@@ -144,16 +195,11 @@ class TranspileResult:
         if backend in {"tensornetwork", "mps"}:
             simulate_kwargs.setdefault("graph_prep", graph_prep)
         with reporter.step("Running Graphix pattern simulation.", "Graphix simulation complete"):
-            return pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
+            return _simulate_pattern(pattern, backend=backend, rng=rng, **simulate_kwargs)
 
     def simulate_statevector(self, **kwargs: Any) -> np.ndarray:
         """Simulate the Graphix pattern and return its flat output statevector."""
-        state = self.simulate(**kwargs)
-        if hasattr(state, "to_statevector"):
-            return np.asarray(state.to_statevector(), dtype=complex)
-        if hasattr(state, "flatten"):
-            return np.asarray(state.flatten(), dtype=complex)
-        return np.asarray(state, dtype=complex).reshape(-1)
+        return _flat_statevector(self.simulate(**kwargs))
 
     def output_permutation(self) -> list[int]:
         """Return the Qiskit-to-Graphix output qubit permutation.
@@ -168,13 +214,19 @@ class TranspileResult:
         input_state: Any | None = None,
         source_circuit: QuantumCircuit | None = None,
     ) -> np.ndarray:
-        """Return the layout-aware Qiskit reference in Graphix output order."""
+        """Return the layout-aware Qiskit reference in Graphix output order.
+
+        The reference input is |+>^n, the state every brickwork pattern starts
+        from. `input_state` is accepted only to be explicit and must equal it
+        up to a global phase.
+        """
         circuit = source_circuit or self.source_circuit
-        state = input_state if input_state is not None else self.input_state
         if circuit is None:
             raise ValueError("qiskit_reference_statevector() needs a source circuit.")
-        if state is None:
-            raise ValueError("qiskit_reference_statevector() needs an input state.")
+        state = _reference_input(
+            input_state if input_state is not None else self.input_state,
+            circuit.num_qubits,
+        )
         return np.asarray(
             utils.calculate_ref_state_from_qiskit_circuit(
                 self.pattern,
@@ -195,13 +247,13 @@ class TranspileResult:
         progress: bool | Callable[[str], None] = False,
         **simulate_kwargs: Any,
     ) -> VerificationResult:
-        """Compare Graphix simulation against Qiskit's statevector result."""
+        """Compare the Graphix simulation against Qiskit's statevector result.
+
+        Keyword arguments other than the ones named here go to `simulate()`.
+        """
         circuit = source_circuit or self.source_circuit
-        state = input_state if input_state is not None else self.input_state
         if circuit is None:
             raise ValueError("verify() needs a source circuit.")
-        if state is None:
-            raise ValueError("verify() needs an input state.")
 
         reporter = ProgressReporter(progress)
         resources = self.resources
@@ -214,49 +266,17 @@ class TranspileResult:
         else:
             reporter.emit("Starting verification.")
 
-        with reporter.step(
-            "Preparing pattern for Graphix simulation.",
-            "Pattern preparation complete",
-        ):
-            pattern = self.pattern if simulate_kwargs.pop("mutate", False) else self.copy_pattern()
-            if simulate_kwargs.pop("standardize", True):
-                pattern.standardize()
-            if simulate_kwargs.pop("shift_signals", True):
-                pattern.shift_signals()
-
-        seed = simulate_kwargs.pop("seed", 0)
-        rng = simulate_kwargs.pop("rng", None)
-        if rng is None and seed is not None:
-            rng = np.random.default_rng(seed)
-        backend = simulate_kwargs.pop("backend", "tensornetwork")
-        if backend in {"tensornetwork", "mps"}:
-            simulate_kwargs.setdefault("graph_prep", "parallel")
-        with reporter.step("Running Graphix pattern simulation.", "Graphix simulation complete"):
-            simulated_obj = pattern.simulate_pattern(backend=backend, rng=rng, **simulate_kwargs)
-        if hasattr(simulated_obj, "to_statevector"):
-            simulated = np.asarray(simulated_obj.to_statevector(), dtype=complex)
-        elif hasattr(simulated_obj, "flatten"):
-            simulated = np.asarray(simulated_obj.flatten(), dtype=complex)
-        else:
-            simulated = np.asarray(simulated_obj, dtype=complex).reshape(-1)
-
         with reporter.step("Computing layout-aware Qiskit reference.", "Qiskit reference complete"):
-            reference = self.qiskit_reference_statevector(input_state=state, source_circuit=circuit)
+            reference = self.qiskit_reference_statevector(
+                input_state=input_state, source_circuit=circuit
+            )
+        simulated = self.simulate_statevector(progress=progress, **simulate_kwargs)
         with reporter.step(
             "Comparing statevectors up to global phase.",
             "Statevector comparison complete",
         ):
-            reference_norm = np.linalg.norm(reference)
-            simulated_norm = np.linalg.norm(simulated)
-            if np.isclose(reference_norm, 0.0, atol=tolerance) or np.isclose(
-                simulated_norm, 0.0, atol=tolerance
-            ):
-                raise AssertionError("One of the states has zero norm.")
-
-            reference_unit = reference / reference_norm
-            simulated_unit = simulated / simulated_norm
-            inner_product = np.vdot(reference_unit, simulated_unit)
-            fidelity = float(np.abs(inner_product))
+            inner_product = utils.state_overlap(reference, simulated, tol=tolerance)
+            fidelity = float(abs(inner_product))
         result = VerificationResult(
             equivalent=bool(np.isclose(fidelity, 1.0, atol=tolerance, rtol=0.0)),
             fidelity=fidelity,
@@ -273,15 +293,19 @@ class TranspileResult:
             result.raise_for_failure()
         return result
 
-    def save_pattern_text(self, path: str | Path, *, limit: int = 2**32) -> Path:
-        """Write Graphix's text representation of the pattern to disk."""
+    def save_pattern_text(self, path: str | Path, *, limit: int | None = None) -> Path:
+        """Write Graphix's text representation of the pattern to disk.
+
+        Commands are written one per line in execution order. `limit` caps the
+        number of commands written; `None` writes them all.
+        """
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        if hasattr(self.pattern, "print_pattern"):
-            text = self.pattern.print_pattern(lim=limit)
-        else:
-            text = repr(self.pattern)
-        output.write_text(str(text), encoding="utf-8")
+        text = self.pattern.to_unicode(left_to_right=True, limit=limit)
+        # Graphix separates commands with spaces; node tuples contain ", ",
+        # so split only on spaces outside parentheses.
+        lines = re.split(r" (?![^(]*\))", text)
+        output.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return output
 
     def __iter__(self) -> Iterator[Any]:

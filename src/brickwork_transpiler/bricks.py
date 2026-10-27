@@ -11,7 +11,7 @@ match Graphix's measurement-angle sign convention.
 """
 
 from . import graph_builder
-from .pattern_converter import _generate_from_graph
+from .pattern_converter import generate_from_graph
 
 
 def arbitrary_brick(a: float, b: float, c: float, with_input: bool = False):
@@ -29,7 +29,7 @@ def arbitrary_brick(a: float, b: float, c: float, with_input: bool = False):
     }
     inputs = [(0, 0)] if with_input else []
     outputs = [(0, 4)]
-    return _generate_from_graph(inside_graph, angles, inputs, outputs)
+    return generate_from_graph(inside_graph, angles, inputs, outputs)
 
 
 def arbitrary_prep_brick(a: float, b: float, c: float):
@@ -43,7 +43,7 @@ def arbitrary_prep_brick(a: float, b: float, c: float):
     }
     inputs: list = []
     outputs = [(0, 4)]
-    return _generate_from_graph(inside_graph, angles, inputs, outputs)
+    return generate_from_graph(inside_graph, angles, inputs, outputs)
 
 
 def CX_bottom_target_brick(with_inputs: bool = False):
@@ -71,7 +71,7 @@ def CX_bottom_target_brick(with_inputs: bool = False):
     }
     inputs = [(0, 0), (1, 0)] if with_inputs else []
     outputs = [(0, 4), (1, 4)]
-    return _generate_from_graph(inside_graph, angles, inputs, outputs)
+    return generate_from_graph(inside_graph, angles, inputs, outputs)
 
 
 def CX_top_target_brick(with_inputs: bool = False):
@@ -96,4 +96,4 @@ def CX_top_target_brick(with_inputs: bool = False):
     }
     inputs = [(0, 0), (1, 0)] if with_inputs else []
     outputs = [(0, 4), (1, 4)]
-    return _generate_from_graph(inside_graph, angles, inputs, outputs)
+    return generate_from_graph(inside_graph, angles, inputs, outputs)

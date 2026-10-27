@@ -1,0 +1,25 @@
+# pip-licenses 5.5.5 (license data)
+# Date: 2026-07-08
+# Command: pip-licenses --format=plain --packages <direct dependencies from pyproject.toml>
+# 'Commercial use?' column derived by SPDX-identifier lookup on the License field:
+#   permissive families (Apache / BSD / MIT / PSF / HPND / MPL) -> Yes
+#   copyleft families (GPL / LGPL / AGPL / SSPL) -> See notes  (none present)
+# graphix: pip-licenses reports UNKNOWN because the maintainer did not
+#   populate the PyPI license classifier; the bundled LICENSE file is Apache 2.0.
+
+ Name               Version  License                                 Commercial use?
+ -----------------  -------  --------------------------------------  ---------------
+ graphix            0.3.5    Apache-2.0 (from bundled LICENSE file)  Yes            
+ llvmlite           0.44.0   BSD                                     Yes            
+ matplotlib         3.10.9   Python Software Foundation License      Yes            
+ networkx           3.6.1    BSD-3-Clause                            Yes            
+ numba              0.61.2   BSD License                             Yes            
+ numpy              2.2.6    BSD License                             Yes            
+ pandas             2.3.3    BSD License                             Yes            
+ pylatexenc         2.10     MIT License                             Yes            
+ qiskit             2.4.1    Apache-2.0                              Yes            
+ qiskit-aer         0.17.2   Apache Software License                 Yes            
+ qiskit-algorithms  0.4.0    Apache Software License                 Yes            
+ quimb              1.11.2   Apache Software License                 Yes            
+ scipy              1.13.1   BSD License                             Yes            
+ tensornetwork      0.4.6    Apache 2.0                              Yes            

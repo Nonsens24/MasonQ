@@ -4,12 +4,21 @@ from qiskit.quantum_info import Statevector
 from brickwork_transpiler import bricks, utils
 
 
+def _statevector(pattern):
+    """Simulate a brick pattern and return its flat statevector.
+
+    The simulator method is `simulate` from Graphix 0.4 and `simulate_pattern` before.
+    """
+    run = getattr(pattern, "simulate", None) or pattern.simulate_pattern
+    return run(backend="statevector").flatten()
+
+
 def test_random_rotation_constant_angles():
     a = -1/4
     b = 1/4
     c = 0
 
-    test_state = bricks.arbitrary_brick(a, b, c).simulate_pattern(backend='statevector').flatten()
+    test_state = _statevector(bricks.arbitrary_brick(a, b, c))
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -28,7 +37,7 @@ def test_arbitrary_rotation_hadamard_from_plus():
     b = 1/4
     c = 1/4
 
-    test_state = bricks.arbitrary_brick(a, b, c).simulate_pattern(backend='statevector').flatten()
+    test_state = _statevector(bricks.arbitrary_brick(a, b, c))
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -49,7 +58,7 @@ def test_arbitrary_rotation_s_from_plus():
 
     test_state = bricks.arbitrary_brick(a, b, c)
 
-    test_result_state = test_state.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_state)
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -70,7 +79,7 @@ def test_arbitrary_rotations_t_from_plus_non_clifford():
 
     test_state = bricks.arbitrary_brick(a, b, c)
 
-    test_result_state = test_state.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_state)
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -90,7 +99,7 @@ def test_arbitrary_rotations_zeroes_from_plus():
     c = 0
 
     test_state = bricks.arbitrary_brick(a, b, c)
-    test_result_state = test_state.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_state)
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -110,7 +119,7 @@ def test_arbitrary_rotations_random_angles_from_plus():
     c = np.random.uniform(0, 2)
 
     test_state = bricks.arbitrary_brick(a, b, c)
-    test_result_state = test_state.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_state)
 
     # Reference circuit
     qc = QuantumCircuit(1)
@@ -127,7 +136,7 @@ def test_arbitrary_rotations_random_angles_from_plus():
 def test_CX_bot_target_plus_input():
 
     test_pattern = bricks.CX_bottom_target_brick()
-    test_result_state = test_pattern.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_pattern)
 
     qc = QuantumCircuit(2)
     # Initialise to |+>
@@ -143,7 +152,7 @@ def test_CX_bot_target_plus_input():
 
 def test_CX_top_target_plus_input():
     test_pattern = bricks.CX_top_target_brick()
-    test_result_state = test_pattern.simulate_pattern(backend='statevector').flatten()
+    test_result_state = _statevector(test_pattern)
 
     qc = QuantumCircuit(2)
     # Initialise to |+>

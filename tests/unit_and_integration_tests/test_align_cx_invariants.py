@@ -18,7 +18,7 @@ import pytest
 from qiskit import QuantumCircuit
 
 from brickwork_transpiler import decomposer
-from brickwork_transpiler.decomposer import _is_cx_endpoint, _cx_group_id
+from brickwork_transpiler.cx_tags import cx_group_id, is_cx_endpoint
 
 
 def _random_cx_circuit(n_qubits: int, n_cx: int, rng: random.Random) -> QuantumCircuit:
@@ -38,8 +38,8 @@ def _row_gid_sequence(matrix) -> List[List[str]]:
         seq = []
         for cell in row:
             for instr in cell:
-                if _is_cx_endpoint(instr.name):
-                    seq.append(_cx_group_id(instr.name))
+                if is_cx_endpoint(instr.name):
+                    seq.append(cx_group_id(instr.name))
         out.append(seq)
     return out
 
@@ -50,7 +50,7 @@ def _endpoint_count(matrix) -> int:
         for row in matrix
         for cell in row
         for instr in cell
-        if _is_cx_endpoint(instr.name)
+        if is_cx_endpoint(instr.name)
     )
 
 
@@ -88,8 +88,8 @@ def test_align_cx_invariants_random_small(seed):
     for r, row in enumerate(aligned):
         for c, cell in enumerate(row):
             for instr in cell:
-                if _is_cx_endpoint(instr.name):
-                    by_gid.setdefault(_cx_group_id(instr.name), []).append((r, c))
+                if is_cx_endpoint(instr.name):
+                    by_gid.setdefault(cx_group_id(instr.name), []).append((r, c))
     for gid, locs in by_gid.items():
         cols = {c for _, c in locs}
         assert len(cols) == 1, f"gid {gid} not on a single column: {locs}"

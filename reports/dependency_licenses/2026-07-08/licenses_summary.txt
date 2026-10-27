@@ -1,0 +1,52 @@
+ Count  License                                                                        
+ 2      Apache 2.0                                                                     
+ 1      Apache License 2.0                                                             
+ 20     Apache Software License                                                        
+ 1      Apache Software License; BSD License                                           
+ 1      Apache Software License; MIT License                                           
+ 6      Apache-2.0                                                                     
+ 1      Apache-2.0 AND CNRI-Python                                                     
+ 1      Apache-2.0 OR BSD-2-Clause                                                     
+ 1      Apache-2.0 OR MIT                                                              
+ 1      BSD                                                                            
+ 1      BSD 3-Clause                                                                   
+ 38     BSD License                                                                    
+ 1      BSD License; GNU Library or Lesser General Public License (LGPL)               
+ 1      BSD-2-Clause                                                                   
+ 7      BSD-3-Clause                                                                   
+ 1      Eclipse Public License 2.0 (EPL-2.0); MIT License                              
+ 1      GNU Lesser General Public License v3 or later (LGPLv3+)                        
+ 2      GPL-3.0-only                                                                   
+ 1      Historical Permission Notice and Disclaimer (HPND)                             
+ 3      ISC License (ISCL)                                                             
+ 25     MIT                                                                            
+ 38     MIT License                                                                    
+ 1      MIT License                                                                    
+                                                                                       
+        Copyright (c) 2022 OpenAI, Shantanu Jain                                       
+                                                                                       
+        Permission is hereby granted, free of charge, to any person obtaining a copy   
+        of this software and associated documentation files (the "Software"), to deal  
+        in the Software without restriction, including without limitation the rights   
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell      
+        copies of the Software, and to permit persons to whom the Software is          
+        furnished to do so, subject to the following conditions:                       
+                                                                                       
+        The above copyright notice and this permission notice shall be included in all 
+        copies or substantial portions of the Software.                                
+                                                                                       
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE    
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER         
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE  
+        SOFTWARE.                                                                      
+                                                                                       
+ 1      MIT License; Mozilla Public License 2.0 (MPL 2.0)                              
+ 1      MPL-2.0 AND (Apache-2.0 OR MIT)                                                
+ 1      Mozilla Public License 2.0 (MPL 2.0)                                           
+ 3      Other/Proprietary License                                                      
+ 1      PSF-2.0                                                                        
+ 2      Python Software Foundation License                                             
+ 1      UNKNOWN                                                                        

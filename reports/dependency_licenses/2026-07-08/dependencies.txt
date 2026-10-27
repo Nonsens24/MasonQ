@@ -1,0 +1,52 @@
+# pip-licenses 5.5.5 (license data)
+# Date: 2026-07-08
+# Command: pip-licenses --format=plain --packages <masonq dependency tree>
+# 'Commercial use?' column derived by SPDX-identifier lookup on the License field:
+#   permissive families (Apache / BSD / MIT / PSF / HPND / MPL) -> Yes
+#   copyleft families (GPL / LGPL / AGPL / SSPL) -> See notes  (none present)
+# graphix: pip-licenses reports UNKNOWN because the maintainer did not
+#   populate the PyPI license classifier; the bundled LICENSE file is Apache 2.0.
+
+ Name               Version      License                                             Commercial use?
+ -----------------  -----------  --------------------------------------------------  ---------------
+ autoray            0.8.10       Apache Software License                             Yes            
+ contourpy          1.3.3        BSD License                                         Yes            
+ cotengra           0.8.0        Apache Software License                             Yes            
+ cycler             0.11.0       BSD License                                         Yes            
+ cytoolz            1.1.0        BSD-3-Clause                                        Yes            
+ dill               0.3.8        BSD License                                         Yes            
+ fonttools          4.51.0       MIT License                                         Yes            
+ graphix            0.3.5        Apache-2.0 (from bundled LICENSE file)              Yes            
+ graphviz           0.21         MIT                                                 Yes            
+ h5py               3.16.0       BSD-3-Clause                                        Yes            
+ kiwisolver         1.4.4        BSD License                                         Yes            
+ llvmlite           0.44.0       BSD                                                 Yes            
+ masonq             0.2.0        Other/Proprietary License                           Ours
+ matplotlib         3.10.9       Python Software Foundation License                  Yes            
+ mpmath             1.3.0        BSD License                                         Yes            
+ networkx           3.6.1        BSD-3-Clause                                        Yes            
+ numba              0.61.2       BSD License                                         Yes            
+ numpy              2.2.6        BSD License                                         Yes            
+ opt_einsum         3.4.0        MIT                                                 Yes            
+ packaging          26.2         Apache-2.0 OR BSD-2-Clause                          Yes            
+ pandas             2.3.3        BSD License                                         Yes            
+ pillow             10.3.0       Historical Permission Notice and Disclaimer (HPND)  Yes            
+ psutil             5.9.0        BSD License                                         Yes            
+ pylatexenc         2.10         MIT License                                         Yes            
+ pyparsing          3.0.9        MIT License                                         Yes            
+ python-dateutil    2.9.0.post0  Apache Software License; BSD License                Yes            
+ pytz               2024.1       MIT License                                         Yes            
+ qiskit             2.4.1        Apache-2.0                                          Yes            
+ qiskit-aer         0.17.2       Apache Software License                             Yes            
+ qiskit-algorithms  0.4.0        Apache Software License                             Yes            
+ quimb              1.11.2       Apache Software License                             Yes            
+ rustworkx          0.17.1       Apache-2.0                                          Yes            
+ scipy              1.13.1       BSD License                                         Yes            
+ six                1.16.0       MIT License                                         Yes            
+ stevedore          5.7.0        Apache Software License                             Yes            
+ sympy              1.12         BSD License                                         Yes            
+ tensornetwork      0.4.6        Apache 2.0                                          Yes            
+ toolz              1.1.0        BSD-3-Clause                                        Yes            
+ tqdm               4.66.4       MIT License; Mozilla Public License 2.0 (MPL 2.0)   Yes            
+ typing_extensions  4.15.0       PSF-2.0                                             Yes            
+ tzdata             2023.3       Apache Software License                             Yes            

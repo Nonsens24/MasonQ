@@ -8,11 +8,10 @@ and is malformed.
 
 import pytest
 
+from brickwork_transpiler.cx_tags import cx_group_id, is_cx_endpoint
 from brickwork_transpiler.decomposer import (
-    _is_cx_endpoint,
-    _cx_group_id,
     align_cx_matrix,
-    insert_rotations_adjecant_to_cx,
+    insert_rotations_adjacent_to_cx,
 )
 
 
@@ -25,23 +24,23 @@ class _I:
 
 
 def test_strict_cx_endpoint_helper_rejects_untagged():
-    assert _is_cx_endpoint("cx0c")
-    assert _is_cx_endpoint("cx12t")
-    assert _is_cx_endpoint("cx999c")
+    assert is_cx_endpoint("cx0c")
+    assert is_cx_endpoint("cx12t")
+    assert is_cx_endpoint("cx999c")
 
     # Untagged or partially tagged: rejected.
-    assert not _is_cx_endpoint("cx")
-    assert not _is_cx_endpoint("cxc")
-    assert not _is_cx_endpoint("cx0")
-    assert not _is_cx_endpoint("cx_")
-    assert not _is_cx_endpoint("cxabc")
-    assert not _is_cx_endpoint("rz")
-    assert not _is_cx_endpoint("")
+    assert not is_cx_endpoint("cx")
+    assert not is_cx_endpoint("cxc")
+    assert not is_cx_endpoint("cx0")
+    assert not is_cx_endpoint("cx_")
+    assert not is_cx_endpoint("cxabc")
+    assert not is_cx_endpoint("rz")
+    assert not is_cx_endpoint("")
 
 
-def test_cx_group_id_extracts_digits():
-    assert _cx_group_id("cx0c") == "0"
-    assert _cx_group_id("cx42t") == "42"
+def testcx_group_id_extracts_digits():
+    assert cx_group_id("cx0c") == "0"
+    assert cx_group_id("cx42t") == "42"
 
 
 def test_align_cx_matrix_ignores_untagged_cx():
@@ -65,6 +64,6 @@ def test_insert_rotations_treats_untagged_cx_as_rotation_carrier():
     the rotation goes to its default leading column."""
     aligned = [[[]]]  # 1 row, 1 col, no CX endpoints
     original = [[[_I("rz")]]]
-    result = insert_rotations_adjecant_to_cx(aligned, original)
+    result = insert_rotations_adjacent_to_cx(aligned, original)
     # rotation lands at col 0 (leading-column default)
     assert [i.name for i in result[0][0]] == ["rz"]

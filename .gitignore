@@ -73,3 +73,8 @@ test_gequiv.py
 outputs/
 images/graphs/example_*
 images/generated/
+
+# Notes written by AI sessions (handoffs, reviews, verification briefs)
+CONTEXT.md
+CODE_REVIEW_*.md
+VERIFY_*.md

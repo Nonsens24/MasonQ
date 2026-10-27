@@ -64,7 +64,7 @@ def test_show_versions_returns_mapping(capsys):
 
     captured = capsys.readouterr()
     assert "qiskit" in versions
-    assert "brickwork-transpiler" in versions
+    assert "masonq" in versions
     assert "qiskit" in captured.out
 
 
@@ -75,12 +75,10 @@ def test_return_stage_resources_and_matrix_are_scientist_friendly():
 
     resources = transpile(qc, return_stage="resources")
     matrix = transpile(qc, return_stage="matrix")
-    legacy_matrix = transpile(qc, return_mat=True)
 
     assert resources.brick_columns == len(matrix[0])
     assert resources.graph_depth == resources.brick_columns * 4 + 1
     assert resources.graph_nodes == resources.brick_rows * resources.graph_depth
-    assert matrix == legacy_matrix
 
 
 def test_return_stage_sparse_matrix_round_trips_from_dense():

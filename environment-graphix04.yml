@@ -1,0 +1,38 @@
+# MasonQ on Graphix 0.4 for Intel Macs.
+#
+# Graphix 0.4 needs numba >= 0.65.1, which has no Intel macOS wheels on PyPI,
+# so numba and llvmlite come from conda-forge here. The editable install of
+# MasonQ must be done afterwards with --no-deps, because pyproject.toml bounds
+# numba below 0.63 for pip-only installs on Intel Macs and pip would otherwise
+# downgrade the conda-forge numba:
+#
+#   conda env create -f environment-graphix04.yml
+#   conda activate masonq-graphix04
+#   python -m pip install --no-deps -e .
+#
+# Everywhere else, and on Intel Macs that are fine with Graphix 0.3.5, a plain
+# `python -m pip install -e .` in a fresh venv is enough (see README.MD). The
+# code runs on both Graphix versions.
+name: masonq-graphix04
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pip
+  - "numba>=0.65.1"
+  - "llvmlite>=0.48"
+  - pip:
+      - "graphix>=0.4,<0.5"
+      - "qiskit>=2.6,<3"
+      - "networkx>=3.2,<4"
+      - "numpy>=2,<3"
+      - "matplotlib>=3.9,<4"
+      - "pylatexenc>=2.10"
+      - "pytest>=7.4"
+      - "pytest-cov>=4.1"
+      - "coverage[toml]>=7.4"
+      - "pytest-xdist>=3.3"
+      - "black>=24.3"
+      - "isort>=5.12"
+      - "mypy>=1.8"

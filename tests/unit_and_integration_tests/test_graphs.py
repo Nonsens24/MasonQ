@@ -5,22 +5,19 @@ from qiskit.quantum_info import Statevector
 from brickwork_transpiler import decomposer, graph_builder, visualiser
 
 
-def gen_test_graph(qc):
-    # Decompose to CX, rzrxrz, id
-    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=3,
-                                                             with_ancillas=False)
-
-    # Optiise instruction matrix with dependency graph
+def aligned_matrix(qc):
+    """Decompose, schedule and align `qc`."""
+    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=3, with_ancillas=False)
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed_qc)
-    qc_mat_aligned = decomposer.align_bricks(cx_mat, qc_mat)
+    return decomposer.align_bricks(cx_mat, qc_mat)
 
-    # Build the graph from the optimised and formatted instruction matrix
-    bw_graph_data = graph_builder.generate_brickwork_graph_from_instruction_matrix(qc_mat_aligned)
 
-    # Get the networkx graph structure
-    bw_nx_graph = graph_builder.to_networkx_graph(bw_graph_data)
-
-    return bw_nx_graph
+def gen_test_graph(qc, matrix=None):
+    """Brickwork graph of `qc`, or of an already aligned `matrix` of it."""
+    if matrix is None:
+        matrix = aligned_matrix(qc)
+    bw_graph_data = graph_builder.generate_brickwork_graph_from_instruction_matrix(matrix)
+    return graph_builder.to_networkx_graph(bw_graph_data)
 
 def test_bw_graph_size_group_size_two_even():
 
@@ -40,26 +37,31 @@ def test_bw_graph_size_group_size_two_even():
 
 
 def test_bw_graph_size_group_size_two_odd():
+    # An odd number of qubits, Hadamards on a random subset and one CX(2, 1).
+    # How many brick columns Qiskit's synthesis needs depends on its version (an
+    # H on the CX control may be split around the CX), so the expected node
+    # count is derived from the aligned matrix: rows * (4 * columns + 1).
+    rng = np.random.default_rng(2026)
+    num_qubits = int(rng.integers(3, 11))
 
-    num_qubits = np.random.random_integers(3, 10)
-
-    if num_qubits % 2 == 0:     #enforce odd
+    if num_qubits % 2 == 0:  # enforce odd
         num_qubits += 1
 
     qc = QuantumCircuit(num_qubits)
 
-    sample = np.random.choice(num_qubits, size=2, replace=False)
-    # enforce unuqueness
-    random_gates = np.random.choice(num_qubits, replace=False, size = np.random.random_integers(1, num_qubits))
-
+    random_gates = rng.choice(num_qubits, replace=False, size=int(rng.integers(1, num_qubits + 1)))
     for i in random_gates:
-        qc.h(i)
+        qc.h(int(i))
 
     qc.cx(2, 1)
 
-    bw_nx_graph = gen_test_graph(qc)
+    matrix = aligned_matrix(qc)
+    bw_nx_graph = gen_test_graph(qc, matrix)
 
-    assert bw_nx_graph.number_of_nodes() == (num_qubits * (2 * 4)) + num_qubits
+    brick_columns = len(matrix[0])
+    assert brick_columns >= 2  # the Hadamard bricks and the CX brick cannot share a column
+    assert len(matrix) == num_qubits
+    assert bw_nx_graph.number_of_nodes() == num_qubits * (4 * brick_columns + 1)
 
 
 def test_shift_bug():

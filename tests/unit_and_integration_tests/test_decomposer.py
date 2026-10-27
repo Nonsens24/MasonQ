@@ -15,7 +15,8 @@ except ImportError:  # Qiskit versions that removed the legacy class.
 
 from brickwork_transpiler import (visualiser, decomposer, brickwork_transpiler)
 from brickwork_transpiler.decomposer import instructions_to_matrix_dag, align_cx_matrix, \
-    insert_rotations_adjecant_to_cx, linearise_multi_ctrl, align_bricks
+    insert_rotations_adjacent_to_cx, linearise_multi_ctrl, align_bricks
+from matrix_checks import check_aligned_matrix, cx_columns, cx_groups, rotation_columns
 
 
 # Dummy instruction class for testing
@@ -54,15 +55,16 @@ def names(matrix):
             names_mat[q][c] = [instr.name for instr in matrix[q][c]]
     return names_mat
 
-def get_matrices(qc):
-    # Decompose to CX, rzrxrz, id
+def pipeline_matrices(qc):
+    """Decompose, schedule and align `qc`; also return the routed circuit."""
     decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=3, with_ancillas=False)
-
-    # Optiise instruction matrix with dependency graph
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed_qc)
     qc_mat_aligned = decomposer.align_bricks(cx_mat, qc_mat)
+    return decomposed_qc, qc_mat, cx_mat, qc_mat_aligned
 
-    return qc_mat, cx_mat, qc_mat_aligned
+
+def get_matrices(qc):
+    return pipeline_matrices(qc)[1:]
 
 class TestBrickAlignment(unittest.TestCase):
 
@@ -253,11 +255,11 @@ class TestBrickAlignment(unittest.TestCase):
 
 
     def test_rotations_with_cx(self):
-        # Two columns: rotations only, then mixed CX and rotations
-        cols = [
-            [['rz'], ['rx'], ['rz'], []],
-            [['cx'], ['cx'], [], ['rz']],
-        ]
+        # Rotations on every qubit and one CX(1, 0). Whatever Euler forms Qiskit
+        # chooses, the aligned matrix must implement the routed circuit, keep the
+        # CX brick on an even column (its top row is 0), place every rotation on
+        # the CX rows next to the CX, and leave the rotations of the other rows
+        # in the leading column.
         qc = QuantumCircuit(4)
         qc.rz(np.pi / 3, 0)
         qc.rx(np.pi / 4, 1)
@@ -265,49 +267,21 @@ class TestBrickAlignment(unittest.TestCase):
         qc.cx(1, 0)
         qc.rz(np.pi / 3, 3)
 
-        qc_mat, cx_mat, qc_mat_aligned = get_matrices(qc)
+        decomposed, qc_mat, cx_mat, aligned = pipeline_matrices(qc)
+        check_aligned_matrix(aligned, decomposed)
 
-        #Before shift
-        cols_qc = list(zip(*qc_mat))
-
-        assert len(cols_qc) == 2
-
-        instr00 = cols_qc[0][0][0]
-        instr01 = cols_qc[0][1][0]
-        instr02 = cols_qc[0][2][0]
-        instr03 = cols_qc[0][3][0]
-
-        instr10 = cols_qc[1][0][0]
-        instr11 = cols_qc[1][1][0]
-
-        assert instr00.name == 'rz'
-        assert instr01.name == 'rx'
-        assert instr02.name == 'rz'
-        assert instr03.name == 'rz'
-
-        assert instr10.name == 'cx0t'
-        assert instr11.name == 'cx0c'
-
-        # After shift
-        cols = list(zip(*qc_mat_aligned))
-
-        assert len(cols) == 3
-
-        instr00 = cols[0][0]
-        instr01 = cols[0][1]
-        instr02 = cols[0][2][0]
-        instr03 = cols[0][3][0]
-
-        instr20 = cols[2][0][0]
-        instr21 = cols[2][1][0]
-
-        assert instr00 == []
-        assert instr01 == []
-        assert instr02.name == 'rz'
-        assert instr03.name == 'rz'
-
-        assert instr20.name == 'cx0t'
-        assert instr21.name == 'cx0c'
+        groups = cx_groups(aligned)
+        self.assertEqual(len(groups), 1)
+        (ends,) = groups.values()
+        self.assertEqual({ends['c'][0], ends['t'][0]}, {0, 1})
+        column = ends['c'][1]
+        self.assertEqual(column % 2, 0)
+        for row in (0, 1):
+            for c in rotation_columns(aligned, row):
+                self.assertEqual(abs(c - column), 1, f'row {row}: rotation at {c} is not next to the CX at {column}')
+        for row in (2, 3):
+            self.assertEqual(cx_columns(aligned, row), [])
+            self.assertEqual(rotation_columns(aligned, row), [0])
 
 
 
@@ -480,16 +454,18 @@ def names(matrix):
     """Helper to extract .name from Instruction matrix."""
     return [[ [instr.name for instr in cell] for cell in row] for row in matrix]
 
-def get_aligned_and_original_from_circ(qc):
-    # Decompose to CX, rzrxrz, id
-    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=3,
-                                                             with_ancillas=False)
+def legacy_pipeline(qc):
+    """Decompose and schedule `qc`, then align with the gap-preserving aligner.
 
-    # Optiise instruction matrix with dependency graph
+    Returns the routed circuit, the aligned CX matrix and the original matrix.
+    """
+    decomposed_qc = decomposer.decompose_qc_to_bricks_qiskit(qc, opt=3, with_ancillas=False)
     qc_mat, cx_mat = decomposer.instructions_to_matrix_dag(decomposed_qc)
-    cx_mat_aligned = align_cx_matrix(cx_mat)
+    return decomposed_qc, align_cx_matrix(cx_mat), qc_mat
 
-    return cx_mat_aligned, qc_mat
+
+def get_aligned_and_original_from_circ(qc):
+    return legacy_pipeline(qc)[1:]
 
 
 class TestInsertRotations(unittest.TestCase):
@@ -497,7 +473,7 @@ class TestInsertRotations(unittest.TestCase):
     def test_empty_matrices(self):
         aligned = []
         original = []
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
         self.assertEqual(result, [])
 
     def test_no_rotations(self):
@@ -506,27 +482,34 @@ class TestInsertRotations(unittest.TestCase):
         qc.cx(2, 3)
 
         aligned, original = get_aligned_and_original_from_circ(qc)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
         self.assertEqual(names(result), names(aligned))
 
     def test_default_insert_to_column_zero(self):
         aligned = [[ [Instruction('cx1', 0, 0, [])] ]]
         original = [[ [Instruction('rz', 0, 0, [])] ]]
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
         expected = [[ ['cx1', 'rz'] ]]
         self.assertEqual(names(result), expected)
 
     def test_left_neighbor_insertion(self):
+        # An rz on the control, then the CX. Qiskit 2.4 keeps the rz before the
+        # CX, Qiskit 2.6 commutes it to after; either way it must land in the
+        # column next to the CX, and nothing may be reordered on its wire.
         qc = QuantumCircuit(2)
         qc.rz(np.pi / 3, 0)
         qc.cx(0, 1)
 
-        aligned, original = get_aligned_and_original_from_circ(qc)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        decomposed, aligned, original = legacy_pipeline(qc)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
-        expected = [[[], ['rz'], ['cx0c']], [[], [], ['cx0t']]]
-        self.assertEqual(names(result), expected)
+        check_aligned_matrix(result, decomposed)
+        (column,) = cx_columns(result, 0)
+        self.assertEqual(cx_columns(result, 1), [column])
+        self.assertEqual(column % 2, 0)
+        self.assertEqual([abs(c - column) for c in rotation_columns(result, 0)], [1])
+        self.assertEqual(rotation_columns(result, 1), [])
 
     def test_right_neighbor_insertion(self):
 
@@ -535,7 +518,7 @@ class TestInsertRotations(unittest.TestCase):
         qc.rz(np.pi/3, 0)
 
         aligned, original = get_aligned_and_original_from_circ(qc)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
         # visualiser.print_matrix(result)
 
         expected = [[['cx0c'], ['rz']], [['cx0t'], []]]
@@ -553,7 +536,7 @@ class TestInsertRotations(unittest.TestCase):
     #     qc.rz(np.pi/5, 0)
     #
     #     aligned, original = get_aligned_and_original_from_circ(qc)
-    #     result = insert_rotations_adjecant_to_cx(aligned, original)
+    #     result = insert_rotations_adjacent_to_cx(aligned, original)
     #     # visualiser.print_matrix(result)
     #
     #     expected = [[[], ['rx'], ['cx0c'], ['rz', 'rx', 'rz']],
@@ -569,7 +552,7 @@ class TestInsertRotations(unittest.TestCase):
         qc.cx(4, 3)
 
         aligned, original = get_aligned_and_original_from_circ(qc)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
         expected = [[['cx0c'], []],
                     [['cx0t'], []],
@@ -587,7 +570,7 @@ class TestInsertRotations(unittest.TestCase):
         qc.cx(5, 4)
 
         aligned, original = get_aligned_and_original_from_circ(qc)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
         # visualiser.print_matrix(result)
 
         expected = [[[], []],
@@ -606,7 +589,7 @@ class TestInsertRotations(unittest.TestCase):
         qc_bugged.cx(0, 1)
 
         aligned, original = get_aligned_and_original_from_circ(qc_bugged)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
         # visualiser.print_matrix(original)
         # visualiser.print_matrix(result)
 
@@ -627,7 +610,7 @@ class TestInsertRotations(unittest.TestCase):
         qc_bugged.cx(0, 1)
 
         aligned, original = get_aligned_and_original_from_circ(qc_bugged)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
         expected = [[[], [], [], [], ['cx1c'], [], [], [], ['cx3c']],
                      [[],
@@ -658,7 +641,7 @@ class TestInsertRotations(unittest.TestCase):
         qc_bugged.cx(0, 1)
 
         aligned, original = get_aligned_and_original_from_circ(qc_bugged)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
         expected = [[[], [], [], [], ['cx1c'], [], [], [], ['cx3c'], [], [], [], ['cx5c']],
                      [[],
@@ -698,59 +681,16 @@ class TestInsertRotations(unittest.TestCase):
         qc_bugged.h(1)
         qc_bugged.cx(2, 1)
 
-        aligned, original = get_aligned_and_original_from_circ(qc_bugged)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        decomposed, aligned, original = legacy_pipeline(qc_bugged)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
-        expected = [[[],
-                  [],
-                  [],
-                  [],
-                  ['cx1c'],
-                  [],
-                  [],
-                  [],
-                  ['cx3c'],
-                  ['rz'],
-                  [],
-                  [],
-                  ['cx5t'],
-                  [],
-                  [],
-                  []],
-                 [[],
-                  ['cx0c'],
-                  ['rz', 'rx', 'rz'],
-                  [],
-                  ['cx1t'],
-                  ['cx2c'],
-                  ['rz'],
-                  [],
-                  ['cx3t'],
-                  ['rz'],
-                  [],
-                  ['cx4t'],
-                  ['cx5c'],
-                  ['rz', 'rx', 'rz'],
-                  [],
-                  ['cx6t']],
-                 [[],
-                  ['cx0t'],
-                  [],
-                  [],
-                  [],
-                  ['cx2t'],
-                  [],
-                  [],
-                  [],
-                  [],
-                  [],
-                  ['cx4c'],
-                  [],
-                  [],
-                  [],
-                  ['cx6c']]]
-
-        self.assertEqual(names(result), expected)
+        # Qiskit 2.4 and 2.6 emit different Euler forms for this circuit, so the
+        # exact layout is not pinned. The invariants are: every CX pair shares a
+        # column on adjacent rows at the parity its top row demands, no
+        # instruction moves on its wire, and the matrix implements the routed
+        # circuit on random input states.
+        check_aligned_matrix(result, decomposed)
+        self.assertEqual(len(result), qc_bugged.num_qubits)
 
 
     def test_many_shifts(self):
@@ -798,86 +738,16 @@ class TestInsertRotations(unittest.TestCase):
         qc_bugged.rz(np.pi / 4, 3)
         qc_bugged.h(4)
 
-        aligned, original = get_aligned_and_original_from_circ(qc_bugged)
-        result = insert_rotations_adjecant_to_cx(aligned, original)
+        decomposed, aligned, original = legacy_pipeline(qc_bugged)
+        result = insert_rotations_adjacent_to_cx(aligned, original)
 
-        expected =  [[[],
-              ['rz', 'rx', 'rz'],
-              ['cx0t'],
-              [],
-              [],
-              [],
-              ['cx3t'],
-              [],
-              [],
-              [],
-              ['cx5t'],
-              [],
-              [],
-              [],
-              []],
-             [[],
-              [],
-              ['cx0c'],
-              ['rz', 'rx', 'rz'],
-              [],
-              ['cx2t'],
-              ['cx3c'],
-              ['rz', 'rx'],
-              [],
-              ['cx4c'],
-              ['cx5c'],
-              ['rx', 'rz'],
-              [],
-              ['cx6c'],
-              []],
-             [[],
-              [],
-              [],
-              [],
-              [],
-              ['cx2c'],
-              ['rz', 'rx'],
-              [],
-              [],
-              ['cx4t'],
-              ['rz', 'rx'],
-              [],
-              [],
-              ['cx6t'],
-              ['rz', 'rx']],
-             [['rx'],
-              ['cx1c'],
-              ['rz', 'rx'],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              []],
-             [['rz', 'rx', 'rz'],
-              ['cx1t'],
-              ['rx'],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              [],
-              []]]
-
-        self.assertEqual(names(result), expected)
+        # Qiskit 2.4 and 2.6 emit different Euler forms for this circuit, so the
+        # exact layout is not pinned. The invariants are: every CX pair shares a
+        # column on adjacent rows at the parity its top row demands, no
+        # instruction moves on its wire, and the matrix implements the routed
+        # circuit on random input states.
+        check_aligned_matrix(result, decomposed)
+        self.assertEqual(len(result), qc_bugged.num_qubits)
 
 
 

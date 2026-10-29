@@ -1,5 +1,16 @@
 # MasonQ
 
+[![Build](https://github.com/Nonsens24/MasonQ/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Nonsens24/MasonQ/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Nonsens24/MasonQ/branch/master/graph/badge.svg)](https://app.codecov.io/gh/Nonsens24/MasonQ)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](pyproject.toml)
+[![PyPI](https://img.shields.io/badge/pypi-not_released-lightgrey.svg)](#)
+[![Python](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](https://www.python.org/)
+[![Qiskit](https://img.shields.io/badge/qiskit-2.4--2.6-6929c4.svg)](https://www.ibm.com/quantum/qiskit)
+[![Graphix](https://img.shields.io/badge/graphix-0.3.5--0.4-blue.svg)](https://github.com/TeamGraphix/graphix)
+[![License](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](#)
+[![Docs](https://img.shields.io/badge/docs-local-blue.svg)](docs/README.md)
+[![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://docs.pytest.org/)
+
 MasonQ converts unitary Qiskit circuits into brickwork measurement-based
 quantum computation patterns. It lowers circuits to the `rz`/`rx`/`cx`/`id`
 basis, schedules them into a brickwork instruction matrix, builds the graph,

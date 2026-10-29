@@ -25,6 +25,9 @@ dependencies = [
   # both from source on Intel Macs. numba 0.62 itself pins llvmlite 0.45 and
   # NumPy < 2.4.
   "numba<0.63; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  # Same story for cryptography (pulled in by qiskit-ibm-runtime via requests-ntlm):
+  # 49.0 dropped Intel macOS wheels, and the source build needs a current Rust.
+  "cryptography<49; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   # Plotting: result.plot(), the visualiser and Qiskit circuit drawings.
   "matplotlib>=3.9,<4",
   "pylatexenc>=2.10",

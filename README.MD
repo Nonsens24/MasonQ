@@ -29,8 +29,9 @@ there before installing.
 
 On Linux, Windows and Apple Silicon Macs this resolves to Graphix 0.4 and
 Qiskit 2.6. On Intel Macs pip takes Graphix 0.3.5 instead, because numba 0.63
-and later ship no Intel macOS wheels; the code runs on both. To use Graphix 0.4
-on an Intel Mac, take numba and llvmlite from conda-forge:
+and later ship no Intel macOS wheels (the code runs on both), and an older
+`cryptography` for the same reason. To use Graphix 0.4 on an Intel Mac, take
+numba and llvmlite from conda-forge:
 
 ```bash
 conda env create -f environment-graphix04.yml

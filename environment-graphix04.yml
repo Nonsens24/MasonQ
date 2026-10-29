@@ -30,6 +30,7 @@ dependencies:
       - "matplotlib>=3.9,<4"
       - "pylatexenc>=2.10"
       - "qiskit-ibm-runtime>=0.46.1,<1"
+      - "cryptography<49"   # 49.0 dropped Intel macOS wheels (needed by qiskit-ibm-runtime)
       - "pytest>=7.4"
       - "pytest-cov>=4.1"
       - "coverage[toml]>=7.4"

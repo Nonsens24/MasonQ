@@ -52,9 +52,11 @@ python -m pip install -e .
 
 Numba stopped publishing Intel macOS wheels at 0.63 and llvmlite at 0.46, so on
 an Intel Mac `pyproject.toml` bounds `numba<0.63`, which brings llvmlite 0.45,
-NumPy 2.3 and Graphix 0.3.5 with it. If pip still tries to build `numba` or
-`llvmlite` from source, the environment is not using the current
-`pyproject.toml`: reinstall with it. For Graphix 0.4 on an Intel Mac, create
+NumPy 2.3 and Graphix 0.3.5 with it. `cryptography`, a transitive dependency of
+`qiskit-ibm-runtime`, dropped Intel macOS wheels at 49.0 and is bounded the same
+way. If pip still tries to build `numba`, `llvmlite` or `cryptography` from
+source, the environment is not using the current `pyproject.toml`: reinstall
+with it. For Graphix 0.4 on an Intel Mac, create
 the conda-forge environment from `environment-graphix04.yml` instead; it
 installs numba and llvmlite from conda, after which the package goes in with
 `python -m pip install --no-deps -e .`.

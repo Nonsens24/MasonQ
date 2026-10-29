@@ -219,7 +219,7 @@ bwt.show_versions()
 
 Proprietary.
 
-## References
+## Relevant Papers
 
 Papers behind this package:
 

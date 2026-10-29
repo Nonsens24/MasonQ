@@ -29,6 +29,7 @@ dependencies:
       - "numpy>=2,<3"
       - "matplotlib>=3.9,<4"
       - "pylatexenc>=2.10"
+      - "qiskit-ibm-runtime>=0.46.1,<1"
       - "pytest>=7.4"
       - "pytest-cov>=4.1"
       - "coverage[toml]>=7.4"

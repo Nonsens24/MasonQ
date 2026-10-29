@@ -18,8 +18,14 @@ Core targets:
   Graphix 0.3.5 on Intel Macs; to run 0.4 there, install numba and llvmlite from
   conda-forge first (`environment-graphix04.yml` does this, followed by
   `pip install --no-deps -e .`).
-- matplotlib >= 3.9 and pylatexenc for plotting (`[viz]`)
-- qiskit-ibm-runtime >= 0.46.1, < 0.47 only for optional IBM cloud/backend access (`[ibm]`)
+- matplotlib >= 3.9 and pylatexenc for plotting
+- qiskit-ibm-runtime >= 0.46.1, < 1 for IBM cloud/backend access from your own scripts
+- pytest, pytest-cov, coverage, pytest-xdist, black, isort and mypy for tests and formatting
+
+All of these are plain dependencies, so one `pip install -e .` gives the whole
+set. The transpiler itself needs only the core group (numpy, networkx, qiskit,
+graphix); for a smaller environment, delete the other groups from
+`dependencies` in `pyproject.toml` before installing.
 
 ## Deprecated Packages To Remove
 
@@ -41,7 +47,7 @@ packages with Qiskit 2.x packages can leave stale provider entry points behind.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -e .
 ```
 
 Numba stopped publishing Intel macOS wheels at 0.63 and llvmlite at 0.46, so on
@@ -53,13 +59,10 @@ the conda-forge environment from `environment-graphix04.yml` instead; it
 installs numba and llvmlite from conda, after which the package goes in with
 `python -m pip install --no-deps -e .`.
 
-IBM Runtime is optional. MasonQ's core transpiler and local verification path do
-not call it. Install it only in environments where your own scripts need IBM
-Quantum service authentication or cloud backend access:
-
-```bash
-python -m pip install -e ".[ibm]"
-```
+IBM Runtime comes with the package so that scripts needing IBM Quantum service
+authentication or cloud backend access work out of the box. MasonQ's core
+transpiler and local verification path do not call it, so it can be dropped
+from `dependencies` without any effect on them.
 
 If you must repair the existing environment:
 

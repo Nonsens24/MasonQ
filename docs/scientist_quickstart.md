@@ -12,7 +12,7 @@ Use Python 3.11 or 3.12 in a fresh virtual environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -e .
 ```
 
 On Intel Macs this gives Graphix 0.3.5 rather than 0.4; the README describes

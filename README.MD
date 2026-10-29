@@ -17,8 +17,15 @@ Use Python 3.11 or 3.12. From a local checkout, in a fresh virtual environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-python -m pip install -e ".[dev]"
+python -m pip install -e .
 ```
+
+That one command installs everything: the transpiler, the plotting libraries,
+the test and formatting tools, and `qiskit-ibm-runtime` for scripts of your own
+that talk to IBM Quantum. The transpiler, the Graphix simulation and the local
+Qiskit reference checks use only the core group of `dependencies` in
+`pyproject.toml`; for a smaller environment, delete the groups you do not need
+there before installing.
 
 On Linux, Windows and Apple Silicon Macs this resolves to Graphix 0.4 and
 Qiskit 2.6. On Intel Macs pip takes Graphix 0.3.5 instead, because numba 0.63
@@ -31,16 +38,8 @@ conda activate masonq-graphix04
 python -m pip install --no-deps -e .
 ```
 
-Optional extras:
-
-```bash
-python -m pip install -e ".[viz]"  # plotting
-python -m pip install -e ".[ibm]"  # IBM cloud/backend access for your own scripts
-```
-
-MasonQ's transpiler, Graphix simulation, and local Qiskit reference checks do
-not use IBM Runtime. See [Dependency migration](docs/dependency_migration.md)
-if an old environment tries to build `numba` or `llvmlite` from source.
+See [Dependency migration](docs/dependency_migration.md) if an old environment
+tries to build `numba` or `llvmlite` from source.
 
 ## Quick Start
 

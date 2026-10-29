@@ -19,7 +19,10 @@ and emits a Graphix pattern with measurement angles.
 The package is aimed at scientific workflows where the brickwork graph,
 resource estimates, and a reproducible verification path matter. The public API
 is alpha, but the core pipeline has unit and integration coverage plus slower
-Graphix/Qiskit equivalence checks in `tests/system_tests`.
+Graphix/Qiskit equivalence checks in `tests/system_tests`. How the transpiler
+works is described in [On the Computational Complexity of Blind Quantum
+Machine Learning](https://arxiv.org/abs/2610.17145); see
+[References](#references) for both papers behind the package.
 
 ## Installation
 
@@ -217,6 +220,17 @@ bwt.show_versions()
 Proprietary.
 
 ## References
+
+Papers behind this package:
+
+- Rex Fleur, Tzula B. Propp, Sebastian Feld, *On the Computational Complexity
+  of Blind Quantum Machine Learning*, arXiv:2610.17145 (2026). Describes how
+  the transpiler works: https://arxiv.org/abs/2610.17145
+- Jiawei Cai, Rex Fleur, Benedikt Tissot, Wolfgang Löffler, Tzula B. Propp,
+  *High-Fidelity Remote Graph State Preparation for Blind Quantum Computation*,
+  arXiv:2610.06247 (2026): https://arxiv.org/abs/2610.06247
+
+Background:
 
 - Universal Blind Quantum Computation: https://arxiv.org/abs/0807.4154
 - The Measurement Calculus: https://arxiv.org/abs/0704.1263

@@ -107,6 +107,26 @@ the brickwork representation. Simulation happens only when you call
 
 Pass `progress=True` to long-running calls for concise timed status messages.
 
+## Visualise the Graph
+
+MasonQ draws the brickwork graph itself, with matplotlib, which is installed
+with it:
+
+```python
+result.plot(save_path="outputs/brickwork_graph.png", title="H and CX")
+```
+
+That writes the figure to the given path (a `.pdf` path gives a vector file).
+Each node is a graph qubit, placed by wire (rows) and position along the wire
+(columns); its label is `(row, column)` and its measurement angle as a multiple
+of pi, and the colour gives the brick type, as the legend says: identity, Euler
+rotation, or one of the two CX bricks. Measurement runs from left to right, and
+the unmeasured output qubits sit on the far right.
+
+To open a window instead of a file, pass `show=True`. Without `save_path`,
+`plot()` writes `images/graphs/<title>.pdf` and `.png` under the current
+directory.
+
 ## Main Objects
 
 - `result.pattern`: the Graphix brickwork pattern.

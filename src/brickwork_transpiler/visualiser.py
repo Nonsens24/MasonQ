@@ -232,7 +232,9 @@ def plot_brickwork_graph_from_pattern(
         font_size=font_size,
         font_family='DejaVu Sans',
         ax=ax,
-        font_weight='medium'
+        # DejaVu Sans ships only Book (400) and Bold; asking for 'medium' made
+        # matplotlib warn and fall back to 400 anyway.
+        font_weight='normal',
     )
 
     ax.set_aspect('equal')

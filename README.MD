@@ -42,6 +42,43 @@ python -m pip install --no-deps -e .
 See [Dependency migration](docs/dependency_migration.md) if an old environment
 tries to build `numba` or `llvmlite` from source.
 
+## Using MasonQ From Another Project
+
+MasonQ is not on PyPI. Install it into the other project's environment in one
+of these ways; the import is the same afterwards. Pin the `master` branch, the
+one with the current code.
+
+From the GitHub repository, for anyone with access to it (use `git+https://`
+instead of `git+ssh://` if you authenticate to GitHub over HTTPS):
+
+```bash
+python -m pip install "masonq @ git+ssh://git@github.com/Nonsens24/MasonQ.git@master"
+```
+
+From a local checkout or the unzipped folder. Without `-e` pip copies the
+package into the environment and no longer looks at the source folder:
+
+```bash
+python -m pip install /path/to/MasonQ
+```
+
+As a dependency of the other project, in its `pyproject.toml`:
+
+```toml
+dependencies = [
+  "masonq @ git+ssh://git@github.com/Nonsens24/MasonQ.git@master",
+]
+```
+
+Then, in that project:
+
+```python
+from brickwork_transpiler import transpile
+```
+
+The platform bounds in `pyproject.toml` travel with the package, so these
+installs resolve the same way as the local one, including on Intel Macs.
+
 ## Quick Start
 
 ```python

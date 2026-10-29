@@ -99,6 +99,9 @@ print(result.resources)
 
 verification = result.verify()
 print(verification.equivalent, verification.fidelity)
+
+# Visualize the output Brickwork graph
+result.plot(save_path="outputs/brickwork_graph.png", title="H and CX")
 ```
 
 `transpile(...)` does not simulate automatically. It constructs and validates

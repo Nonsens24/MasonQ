@@ -1,0 +1,32 @@
+
+== 6603b68 (QFT and QRS-with-database data commit, 2025-08-08): experiments_qft.csv
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+   row 0         21         21         26         26   +0.00  
+   row 1         40         40         41         41   +0.00  
+   row 2         61         61         67         65   -2.99  
+   row 3         90         90        103        108   +4.85  
+   row 4        121        121        128        129   +0.78  
+   row 5        160        160        144        148   +2.78  
+   row 6        201        201        208        204   -1.92  
+   row 7        250        250        227        249   +9.69  
+largest depth deviation: 9.69%
+
+== 6603b68 (QFT and QRS-with-database data commit, 2025-08-08): experiments_qrs_full_one_match.csv
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     L=4        375        735       6924       6759   -2.38  iterations 1 -> 1  <-- gate count differs
+     L=8       1101        605      21868      22129   +1.19  iterations 2 -> 2  <-- gate count differs
+    L=16       1439       1283      61144      61263   +0.19  iterations 3 -> 3  <-- gate count differs
+largest depth deviation: 2.38%
+
+== a1146f7 (HHL data commit, 2025-10-03): experiments_hhl.csv
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     N=4       2598       2598       3400       3400   +0.00  
+     N=8      37541      37541      50649      50649   +0.00  
+largest depth deviation: 0.00%
+
+== d9dc034 (inference-only data commit, 2025-08-05): experiments_qrs_no_db_one_match.csv
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     L=4        152        152       6142       6122   -0.33  iterations 1 -> 1
+     L=8        256        256      15243      15105   -0.91  iterations 2 -> 2
+    L=16        364        364      24435      25007   +2.34  iterations 3 -> 3
+largest depth deviation: 2.34%

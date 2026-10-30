@@ -1,0 +1,145 @@
+Minimal B-QRS (paper Section 3.3): transpiler settings scan, 30 Oct 2026
+
+Only transpile() arguments were varied (layout method, routing method, Qiskit optimisation level);
+no ancillas (the circuit has no multi-controlled gates); six runs per setting; the circuit is
+circuits.minimal_qrs([0, 1]) (6 qubits: h 5, cx 5, cp 2, p 2, x 1). Columns: smallest brick depth
+over the runs, the distribution of brick depths, and graph columns / nodes / CZ for the smallest.
+Graph columns = 4 x brick columns + 1; nodes = 6 x graph columns; measurements = nodes - 6.
+
+===== Archived code of this branch (base commit cc3bdca), original environment (Qiskit 0.46.3)
+setting                              brick columns (min / all runs)        graph columns  nodes  CZ   (for the min)
+layout=trivial routing=basic      opt=0  not available (AssertionError)
+layout=trivial routing=basic      opt=1   74 / {74: 6}    297  1782  2146   (8s)
+layout=trivial routing=basic      opt=2   74 / {74: 6}    297  1782  2146   (6s)
+layout=trivial routing=basic      opt=3   74 / {74: 6}    297  1782  2146   (6s)
+layout=trivial routing=stochastic opt=0  not available (AssertionError)
+layout=trivial routing=stochastic opt=1   38 / {38: 5, 46: 1}    153   918  1102   (2s)
+layout=trivial routing=stochastic opt=2   34 / {34: 2, 41: 3, 44: 1}    137   822   986   (3s)
+layout=trivial routing=stochastic opt=3   34 / {34: 3, 39: 1, 42: 2}    137   822   986   (2s)
+layout=trivial routing=lookahead  opt=0  not available (AssertionError)
+layout=trivial routing=lookahead  opt=1   30 / {30: 6}    121   726   870   (2s)
+layout=trivial routing=lookahead  opt=2   28 / {28: 6}    113   678   812   (2s)
+layout=trivial routing=lookahead  opt=3   28 / {28: 6}    113   678   812   (2s)
+layout=trivial routing=sabre      opt=0  not available (AssertionError)
+layout=trivial routing=sabre      opt=1   32 / {32: 6}    129   774   928   (1s)
+layout=trivial routing=sabre      opt=2   32 / {32: 6}    129   774   928   (1s)
+layout=trivial routing=sabre      opt=3   32 / {32: 6}    129   774   928   (1s)
+layout=dense   routing=basic      opt=0  not available (AssertionError)
+layout=dense   routing=basic      opt=1   58 / {58: 6}    233  1398  1682   (3s)
+layout=dense   routing=basic      opt=2   58 / {58: 6}    233  1398  1682   (4s)
+layout=dense   routing=basic      opt=3   58 / {58: 6}    233  1398  1682   (3s)
+layout=dense   routing=stochastic opt=0  not available (AssertionError)
+layout=dense   routing=stochastic opt=1   38 / {38: 3, 46: 3}    153   918  1102   (2s)
+layout=dense   routing=stochastic opt=2   38 / {38: 4, 46: 2}    153   918  1102   (2s)
+layout=dense   routing=stochastic opt=3   38 / {38: 2, 43: 1, 44: 3}    153   918  1102   (2s)
+layout=dense   routing=lookahead  opt=0  not available (AssertionError)
+layout=dense   routing=lookahead  opt=1   30 / {30: 6}    121   726   870   (1s)
+layout=dense   routing=lookahead  opt=2   28 / {28: 6}    113   678   812   (2s)
+layout=dense   routing=lookahead  opt=3   28 / {28: 6}    113   678   812   (2s)
+layout=dense   routing=sabre      opt=0  not available (AssertionError)
+layout=dense   routing=sabre      opt=1   32 / {32: 6}    129   774   928   (1s)
+layout=dense   routing=sabre      opt=2   32 / {32: 6}    129   774   928   (1s)
+layout=dense   routing=sabre      opt=3   32 / {32: 6}    129   774   928   (1s)
+layout=sabre   routing=basic      opt=0  not available (AssertionError)
+layout=sabre   routing=basic      opt=1   16 / {16: 6}     65   390   464   (0s)
+layout=sabre   routing=basic      opt=2   12 / {12: 2, 16: 1, 18: 3}     49   294   348   (0s)
+layout=sabre   routing=basic      opt=3   16 / {16: 4, 18: 2}     65   390   464   (1s)
+layout=sabre   routing=stochastic opt=0  not available (AssertionError)
+layout=sabre   routing=stochastic opt=1   16 / {16: 3, 20: 1, 21: 1, 26: 1}     65   390   464   (1s)
+layout=sabre   routing=stochastic opt=2   12 / {12: 1, 17: 1, 18: 1, 20: 1, 23: 1, 24: 1}     49   294   348   (1s)
+layout=sabre   routing=stochastic opt=3   18 / {18: 2, 19: 1, 21: 2, 23: 1}     73   438   522   (1s)
+layout=sabre   routing=lookahead  opt=0  not available (AssertionError)
+layout=sabre   routing=lookahead  opt=1   16 / {16: 4, 21: 2}     65   390   464   (1s)
+layout=sabre   routing=lookahead  opt=2   12 / {12: 2, 16: 1, 17: 3}     49   294   348   (1s)
+layout=sabre   routing=lookahead  opt=3   16 / {16: 4, 19: 1, 21: 1}     65   390   464   (1s)
+layout=sabre   routing=sabre      opt=0  not available (AssertionError)
+layout=sabre   routing=sabre      opt=1   16 / {16: 5, 21: 1}     65   390   464   (0s)
+layout=sabre   routing=sabre      opt=2   12 / {12: 6}     49   294   348   (0s)
+layout=sabre   routing=sabre      opt=3   16 / {16: 4, 21: 2}     65   390   464   (1s)
+BEST: layout=sabre   routing=basic      opt=2 -> brick columns 12, graph columns 49, nodes 294, CZ 348
+
+===== Current MasonQ master (commit 6dd57b0), Qiskit 2.6.1, Graphix 0.4.1
+setting                              brick columns (min / all runs)        graph columns  nodes  CZ   (for the min)
+layout=None    routing=None       opt=0   32 / {32: 3, 40: 2, 41: 1}    129   774   928   (1s)
+layout=None    routing=None       opt=1   16 / {16: 5, 21: 1}     65   390   464   (0s)
+layout=None    routing=None       opt=2   16 / {16: 4, 23: 2}     65   390   464   (0s)
+layout=None    routing=None       opt=3   16 / {16: 3, 23: 3}     65   390   464   (0s)
+layout=None    routing=basic      opt=0   72 / {72: 6}    289  1734  2088   (2s)
+layout=None    routing=basic      opt=1   16 / {16: 6}     65   390   464   (0s)
+layout=None    routing=basic      opt=2   16 / {16: 5, 20: 1}     65   390   464   (0s)
+layout=None    routing=basic      opt=3   16 / {16: 2, 20: 4}     65   390   464   (0s)
+layout=None    routing=lookahead  opt=0   32 / {32: 6}    129   774   928   (1s)
+layout=None    routing=lookahead  opt=1   16 / {16: 3, 21: 3}     65   390   464   (1s)
+layout=None    routing=lookahead  opt=2   16 / {16: 3, 23: 3}     65   390   464   (1s)
+layout=None    routing=lookahead  opt=3   16 / {16: 4, 23: 2}     65   390   464   (1s)
+layout=None    routing=sabre      opt=0   32 / {32: 5, 41: 1}    129   774   928   (0s)
+layout=None    routing=sabre      opt=1   16 / {16: 4, 21: 2}     65   390   464   (0s)
+layout=None    routing=sabre      opt=2   16 / {16: 2, 23: 4}     65   390   464   (0s)
+layout=None    routing=sabre      opt=3   16 / {16: 4, 23: 2}     65   390   464   (0s)
+layout=trivial routing=None       opt=0   32 / {32: 3, 40: 3}    129   774   928   (1s)
+layout=trivial routing=None       opt=1   32 / {32: 6}    129   774   928   (1s)
+layout=trivial routing=None       opt=2   36 / {36: 6}    145   870  1044   (1s)
+layout=trivial routing=None       opt=3   36 / {36: 6}    145   870  1044   (1s)
+layout=trivial routing=basic      opt=0   72 / {72: 6}    289  1734  2088   (1s)
+layout=trivial routing=basic      opt=1   72 / {72: 6}    289  1734  2088   (1s)
+layout=trivial routing=basic      opt=2   78 / {78: 6}    313  1878  2262   (2s)
+layout=trivial routing=basic      opt=3   78 / {78: 6}    313  1878  2262   (1s)
+layout=trivial routing=lookahead  opt=0   32 / {32: 6}    129   774   928   (1s)
+layout=trivial routing=lookahead  opt=1   30 / {30: 6}    121   726   870   (1s)
+layout=trivial routing=lookahead  opt=2   30 / {30: 6}    121   726   870   (1s)
+layout=trivial routing=lookahead  opt=3   30 / {30: 6}    121   726   870   (2s)
+layout=trivial routing=sabre      opt=0   32 / {32: 5, 40: 1}    129   774   928   (1s)
+layout=trivial routing=sabre      opt=1   32 / {32: 6}    129   774   928   (1s)
+layout=trivial routing=sabre      opt=2   36 / {36: 6}    145   870  1044   (1s)
+layout=trivial routing=sabre      opt=3   36 / {36: 6}    145   870  1044   (1s)
+layout=dense   routing=None       opt=0   32 / {32: 4, 41: 1, 42: 1}    129   774   928   (4s)
+layout=dense   routing=None       opt=1   32 / {32: 4, 40: 2}    129   774   928   (1s)
+layout=dense   routing=None       opt=2   36 / {36: 6}    145   870  1044   (1s)
+layout=dense   routing=None       opt=3   36 / {36: 6}    145   870  1044   (1s)
+layout=dense   routing=basic      opt=0   56 / {56: 6}    225  1350  1624   (1s)
+layout=dense   routing=basic      opt=1   56 / {56: 6}    225  1350  1624   (1s)
+layout=dense   routing=basic      opt=2   58 / {58: 6}    233  1398  1682   (1s)
+layout=dense   routing=basic      opt=3   58 / {58: 6}    233  1398  1682   (1s)
+layout=dense   routing=lookahead  opt=0   32 / {32: 6}    129   774   928   (1s)
+layout=dense   routing=lookahead  opt=1   30 / {30: 6}    121   726   870   (1s)
+layout=dense   routing=lookahead  opt=2   30 / {30: 6}    121   726   870   (1s)
+layout=dense   routing=lookahead  opt=3   30 / {30: 6}    121   726   870   (1s)
+layout=dense   routing=sabre      opt=0   32 / {32: 6}    129   774   928   (1s)
+layout=dense   routing=sabre      opt=1   32 / {32: 5, 40: 1}    129   774   928   (1s)
+layout=dense   routing=sabre      opt=2   36 / {36: 6}    145   870  1044   (1s)
+layout=dense   routing=sabre      opt=3   36 / {36: 6}    145   870  1044   (0s)
+layout=sabre   routing=None       opt=0   16 / {16: 3, 21: 3}     65   390   464   (0s)
+layout=sabre   routing=None       opt=1   16 / {16: 4, 21: 2}     65   390   464   (0s)
+layout=sabre   routing=None       opt=2   16 / {16: 6}     65   390   464   (0s)
+layout=sabre   routing=None       opt=3   16 / {16: 5, 23: 1}     65   390   464   (0s)
+layout=sabre   routing=basic      opt=0   16 / {16: 6}     65   390   464   (0s)
+layout=sabre   routing=basic      opt=1   16 / {16: 6}     65   390   464   (0s)
+layout=sabre   routing=basic      opt=2   16 / {16: 4, 20: 2}     65   390   464   (0s)
+layout=sabre   routing=basic      opt=3   16 / {16: 4, 20: 2}     65   390   464   (0s)
+layout=sabre   routing=lookahead  opt=0   16 / {16: 3, 21: 3}     65   390   464   (0s)
+layout=sabre   routing=lookahead  opt=1   16 / {16: 4, 21: 2}     65   390   464   (0s)
+layout=sabre   routing=lookahead  opt=2   16 / {16: 4, 23: 2}     65   390   464   (1s)
+layout=sabre   routing=lookahead  opt=3   16 / {16: 4, 23: 2}     65   390   464   (1s)
+layout=sabre   routing=sabre      opt=0   16 / {16: 4, 21: 2}     65   390   464   (0s)
+layout=sabre   routing=sabre      opt=1   16 / {16: 5, 21: 1}     65   390   464   (0s)
+layout=sabre   routing=sabre      opt=2   16 / {16: 3, 23: 3}     65   390   464   (0s)
+layout=sabre   routing=sabre      opt=3   16 / {16: 3, 23: 3}     65   390   464   (0s)
+BEST: layout=None    routing=None       opt=1 -> brick columns 16, graph columns 65, nodes 390, CZ 464
+
+===== Semantic check of the archived-code patterns (Graphix simulation vs Qiskit reference, as in
+the archived system tests), four runs per setting:
+layout=sabre routing=sabre opt=2 run 0: brick columns 16, graph columns 65, nodes 390, CZ 464, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=2 run 1: brick columns 16, graph columns 65, nodes 390, CZ 464, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=2 run 2: brick columns 12, graph columns 49, nodes 294, CZ 348, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=2 run 3: brick columns 12, graph columns 49, nodes 294, CZ 348, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=1 run 0: brick columns 16, graph columns 65, nodes 390, CZ 464, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=1 run 1: brick columns 21, graph columns 85, nodes 510, CZ 610, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=1 run 2: brick columns 16, graph columns 65, nodes 390, CZ 464, overlap with Qiskit reference 1.000000000000
+layout=sabre routing=sabre opt=1 run 3: brick columns 16, graph columns 65, nodes 390, CZ 464, overlap with Qiskit reference 1.000000000000
+layout=trivial routing=sabre opt=3 run 0: brick columns 32, graph columns 129, nodes 774, CZ 928, overlap with Qiskit reference 1.000000000000
+layout=trivial routing=sabre opt=3 run 1: brick columns 32, graph columns 129, nodes 774, CZ 928, overlap with Qiskit reference 1.000000000000
+layout=trivial routing=sabre opt=3 run 2: brick columns 32, graph columns 129, nodes 774, CZ 928, overlap with Qiskit reference 1.000000000000
+layout=trivial routing=sabre opt=3 run 3: brick columns 32, graph columns 129, nodes 774, CZ 928, overlap with Qiskit reference 1.000000000000
+
+Current master, SABRE layout and routing, optimisation level 1: 16 brick columns, graph depth 65,
+390 nodes; result.verify() against Qiskit: equivalent, fidelity 1.000000000000.

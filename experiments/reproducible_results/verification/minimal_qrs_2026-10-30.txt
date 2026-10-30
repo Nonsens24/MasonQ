@@ -1,0 +1,23 @@
+Minimal QRS (paper Section 3.3), transpiled on 30 Oct 2026 with the archived code of this branch
+in the original environment (envB), exactly as src/brickwork_transpiler/experiments/
+minimal_qrs_transpilation_simulation.py::build_graph does it (routing sabre, layout trivial,
+no ancillas), for all four user feature vectors:
+
+  circuit 6 qubits; brickwork graph 6 rows x 129 graph columns = 774 nodes, 928 CZ edges,
+  768 measurements (32 brick columns; graph depth 4*32 + 1 = 129).
+  Ten repeated runs at the branch base and ten at commit 233c2d1 (12 Aug 2025, the commit that
+  added this experiment) all give (129 columns, 774 nodes, 928 CZ): the result is deterministic.
+
+  Other settings, archived code: layout sabre gives 65-85 graph columns (390-510 nodes, 464-610 CZ),
+  varying between runs; with ancillas, 1032 nodes / 1248 CZ (trivial layout).
+
+  Current MasonQ master (commit 6dd57b0, 30 Oct 2026, Qiskit 2.6.1), routing sabre, layout sabre:
+  6 rows x 16 brick columns, graph depth 65, 390 nodes, 464 CZ.
+
+The manuscript (Section 3.3) states 750 RSP qubits, 750 measurements, a graph 125 deep and 900 CZ
+gates, i.e. 31 brick columns. No archived configuration reproduces 31 brick columns; the archived
+build_graph configuration gives 32. The difference is one brick column (4 graph columns, 24 qubits,
+28 CZ). The origin of the 31-column run is not recorded.
+
+Settings scan of 30 Oct 2026 (layout, routing, optimisation level): see
+minimal_qrs_settings_scan_2026-10-30.txt.

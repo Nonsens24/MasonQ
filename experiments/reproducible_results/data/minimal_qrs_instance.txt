@@ -1,0 +1,17 @@
+Minimal B-QRS instance (paper Section 3.3), generated 2026-10-30
+code: MasonQ at /Users/rexfleur/Desktop/bwt-trades/gpt55-claude/MasonQ-reproducible
+environment: Python 3.11.13, qiskit 0.46.3, graphix 0.3.1
+circuit: circuits.minimal_qrs([0, 1]); database {(0,0), (0,1)}, user feature (0, 1); 6 qubits, 15 gates
+decomposed and routed circuit: 6 qubits, 34 gates, depth 15, ops {'rz': 17, 'cx': 12, 'rx': 5}
+transpile settings: {'routing_method': 'sabre', 'layout_method': 'sabre', 'with_ancillas': False, 'opt': 1}
+runs: 12; brick columns per run: {16: 6, 21: 6}; smallest kept
+
+brick columns (D)        16
+graph columns (4D + 1)   65
+rows (logical qubits)    6
+graph nodes (RSP qubits) 390
+measurements             384
+CZ edges                 464
+qubits held at once      12 (two graph columns of 6, cylindrical register)
+
+verification: Graphix tensor-network simulation vs Qiskit reference state, overlap 1.000000000000

@@ -1,0 +1,16 @@
+Figures regenerated on 30 Oct 2026 from ../data with scripts/make_scaling_figures.py
+Environment: masonq-qiskit24 (Python 3.11, matplotlib 3.10.9, numpy 2.2.6), the environment of the 7 Oct 2026 figures.
+Comparison with the submitted PNGs (paper_figures/results of the authors' working copy), pixel by pixel:
+
+hhl_HHL_logN_sq_newplot_fancy_best.png           identical bytes=True  pixels differing=0 of 3302208   max diff=0
+hhl_thesis_hhl_final_plots_unopt_dense.png       identical bytes=True  pixels differing=0 of 10514136  max diff=0
+qrs_QRS_WITH_db_scaling_fb_SINGLE.png            identical bytes=True  pixels differing=0 of 3302208   max diff=0
+qrs_QRS_inference_scaling_fb_SINGLE.png          identical bytes=True  pixels differing=0 of 3302208   max diff=0
+qrs_qrs_no_db_no_decomp.png                      identical bytes=True  pixels differing=0 of 10514136  max diff=0
+qrs_qrs_with_db_L_no_decomp.png                  identical bytes=True  pixels differing=0 of 10514136  max diff=0
+qrs_thesis_qft_log3_bound_fancy_best.png         identical bytes=True  pixels differing=0 of 3302208   max diff=0
+
+The script's own assertions (every reference curve stays above the data) all passed; its printed
+ratios: QFT tightest depth/(7 ln^3 N) = 0.413; HHL fixed clock tightest depth/(5000 ln^3 N) = 0.928,
+local slopes 2.17 ... 0.26, gates/n^2 1667 ... 1437; F12 tightest depth/(0.3 omega G) = 0.758, 0.623,
+0.933, 0.733.

@@ -1,0 +1,40 @@
+
+== experiments_qft.csv  (8 rerun rows vs 27 archived rows)
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+   row 0         21         21         26         27   +3.85  
+   row 1         40         40         41         41   +0.00  
+   row 2         61         61         67         65   -2.99  
+   row 3         90         90        103        109   +5.83  
+   row 4        121        121        128        128   +0.00  
+   row 5        160        160        144        148   +2.78  
+   row 6        201        201        208        212   +1.92  
+   row 7        250        250        227        240   +5.73  
+largest depth deviation: 5.83%
+
+== experiments_qrs_no_db_one_match.csv  (3 rerun rows vs 6 archived rows)
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     L=4        152        735       6142       6881  +12.03  iterations 1 -> 1  <-- gate count differs
+     L=8        256        605      15243      21862  +43.42  iterations 2 -> 2  <-- gate count differs
+    L=16        364       1283      24435      61202 +150.47  iterations 3 -> 3  <-- gate count differs
+largest depth deviation: 150.47%
+
+== experiments_qrs_full_one_match.csv  (3 rerun rows vs 6 archived rows)
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     L=4        375        735       6924       6973   +0.71  iterations 1 -> 1  <-- gate count differs
+     L=8       1101        605      21868      21743   -0.57  iterations 2 -> 2  <-- gate count differs
+    L=16       1439       1283      61144      61215   +0.12  iterations 3 -> 3  <-- gate count differs
+largest depth deviation: 0.71%
+
+== experiments_hhl.csv  (2 rerun rows vs 4 archived rows)
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     N=4       2598       2598       3400       3075   -9.56  
+     N=8      37541      37541      50649      46797   -7.61  
+largest depth deviation: 9.56%
+
+
+== branch base cc3bdca, initialise_database patched out (as in the 5 Aug 2025 run): experiments_qrs_no_db_one_match.csv
+     key  gates ref  gates new  depth ref  depth new   diff%  other
+     L=4        152        204       6142       6493   +5.71  iterations 1 -> 1  <-- gate count differs
+     L=8        256        360      15243      15474   +1.52  iterations 2 -> 2  <-- gate count differs
+    L=16        364        520      24435      24340   -0.39  iterations 3 -> 3  <-- gate count differs
+largest depth deviation: 5.71%

@@ -22,7 +22,7 @@ is alpha, but the core pipeline has unit and integration coverage plus slower
 Graphix/Qiskit equivalence checks in `tests/system_tests`. How the transpiler
 works is described in [On the Computational Complexity of Blind Quantum
 Machine Learning](https://arxiv.org/abs/2610.17145); see
-[References](#references) for both papers behind the package.
+[Relevant Papers](#relevant-papers) for both papers behind the package.
 
 ## Installation
 
@@ -218,6 +218,20 @@ bwt.show_versions()
 ## License
 
 Proprietary.
+
+## Reproducing the Paper's Results
+
+The numerical results of the computational-complexity paper live on the
+`reproducible-results` branch, in `experiments/reproducible_results/`: the data
+behind every scaling figure, the script that draws the figures from them, the
+scripts of the fixed-clock HHL re-run, checksums, and a record of the
+verification runs. That branch is based on the state of the code that produced
+the data, with the original experiment scripts in place, and its README maps
+each figure to its data file, script and software environment.
+
+```bash
+git switch reproducible-results
+```
 
 ## Relevant Papers
 

@@ -1,0 +1,30 @@
+# The 2025 experiment environment, trimmed to what the archived experiments, the minimal
+# B-QRS instance and the HHL circuit builder import. Versions are those of
+# requirements-lock.txt at the repository root, the full freeze of the original environment.
+# Python 3.11. Install with
+#   pip install -r requirements-2025.txt
+#   pip install --no-deps quantum_linear_solvers==0.1.1
+# The second line is separate because quantum_linear_solvers declares qiskit-ibmq-provider
+# as a dependency, which pins NumPy below 1.24; the HHL circuit construction used here does
+# not need it.
+numpy==2.2.6
+scipy==1.15.3
+networkx==3.5
+numba==0.61.2
+llvmlite==0.44.0
+quimb==1.11.2
+graphix==0.3.1
+qiskit==0.46.3
+qiskit-terra==0.46.3
+qiskit-aer==0.14.2
+qiskit-algorithms==0.3.1
+mapomatic==0.6.0
+mthree==0.24.0
+# a transitive dependency of the stack above; pinned to the lock file because the newest
+# release has no Intel macOS wheel and pip would try to build it from source
+cryptography==45.0.5
+matplotlib==3.10.5
+pylatexenc==2.10
+pandas==2.3.1
+pytest==8.4.1
+importlib-metadata==8.7.0

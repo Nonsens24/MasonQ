@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![Qiskit](https://img.shields.io/badge/qiskit-0.46.3-6929c4.svg)](https://www.ibm.com/quantum/qiskit)
 [![Graphix](https://img.shields.io/badge/graphix-0.3.1-blue.svg)](https://github.com/TeamGraphix/graphix)
-[![Checksums](https://img.shields.io/badge/SHA256SUMS-96_files-lightgrey.svg)](SHA256SUMS)
+[![Checksums](https://img.shields.io/badge/SHA256SUMS-97_files-lightgrey.svg)](SHA256SUMS)
 
 Data, figures and scripts behind *On the Computational Complexity of Blind
 Quantum Machine Learning* (Rex Fleur, Tzula B. Propp, Sebastian Feld,
@@ -25,7 +25,9 @@ regenerate from `data/` byte for byte.
 ## Quick Start
 
 Verify the files, then redraw the results figures. Only NumPy and matplotlib are
-needed for this; the submitted PNGs were made with matplotlib 3.10.9.
+needed for this; the submitted PNGs were made with matplotlib 3.10.9. The
+[Reproduce Guide](#reproduce-guide) covers the full installation and every
+experiment.
 
 ```bash
 shasum -a 256 -c SHA256SUMS
@@ -51,6 +53,7 @@ experiments/reproducible_results/
   figures/manuscript/             every figure file of the arXiv submission, under the paths
                                   the LaTeX source uses
   scripts/
+    requirements-2025.txt         the 2025 environment, pinned (section Reproduce Guide)
     make_scaling_figures.py       draws Figs. 5, 6, F12, F13 and F14 from data/
     minimal_qrs_instance.py       reproduces the minimal B-QRS instance of Section 3.3
     run_archived_experiments.py   runs the archived 2025 experiment code for small sizes
@@ -208,32 +211,138 @@ text gives the numbers above. The matching drawing is
 and optimisation-level settings for the archived code and for `master`, which
 gives the same 16-column instance with SABRE layout.
 
-## Reproducing
+## Reproduce Guide
 
-`<2025 env>` is a Python from `requirements-lock.txt` plus `linear_solvers`;
-`<master env>` one with the current MasonQ installed.
+Two environments cover everything. The 2025 environment runs the archived code
+of this branch: the experiment scripts, the minimal B-QRS instance and the HHL
+circuit builder. The current MasonQ, on `master`, runs the transpilation step of
+Fig. 5b. Both were exercised from scratch on 30 October 2026; the steps below
+are what was run.
 
-Fig. 5b from scratch, about 15 minutes:
-
-```bash
-cd scripts/hhl_fixed_clock && <2025 env> build_circuits.py 5 12 6 && <master env> transpile_circuits.py nl5 1 12 fixed_clock_rerun.csv && PYTHONPATH=. <master env> semantic_check.py nl5 1 2 3
-```
-
-The minimal B-QRS instance, about a minute:
+### 1. Get the branch
 
 ```bash
-MPLBACKEND=Agg <2025 env> scripts/minimal_qrs_instance.py <repository root> /tmp/masonq-minimal 12
+git clone git@github.com:Nonsens24/MasonQ.git && cd MasonQ && git switch reproducible-results
 ```
 
-The archived 2025 experiments for small sizes, from a scratch directory so that
-nothing in the repository is written to:
+### 2. Install the 2025 environment
+
+Python 3.11, in a fresh virtual environment. `scripts/requirements-2025.txt`
+pins the versions of the original run (Qiskit 0.46.3, Graphix 0.3.1,
+NumPy 2.2.6, numba 0.61.2); `requirements-lock.txt` at the repository root is
+the full freeze it was trimmed from. `quantum_linear_solvers` is Qiskit's HHL
+reference implementation; it is installed without its dependencies because it
+declares an IBM provider package that pins NumPy below 1.24 and is not needed
+for building circuits.
 
 ```bash
-<2025 env> scripts/run_archived_experiments.py <repository root> /tmp/masonq-rerun qft full nodb hhl
+python3.11 -m venv .venv-2025 && source .venv-2025/bin/activate && python -m pip install --upgrade pip
 ```
 
-Full-size re-runs take hours: QRS up to L = 128, QFT up to 29 qubits, the HHL
-families up to N = 32.
+```bash
+python -m pip install -r experiments/reproducible_results/scripts/requirements-2025.txt && python -m pip install --no-deps quantum_linear_solvers==0.1.1 && python -m pip install -e .
+```
+
+The last command installs the archived package itself, `brickwork-transpiler`
+0.1.0, as a library. Its API is the one the 2025 experiments used, which differs
+from today's `masonq`: `transpile` returns a tuple of the Graphix pattern, the
+node colour map and the routed circuit.
+
+```python
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
+from brickwork_transpiler import brickwork_transpiler
+
+qc = QuantumCircuit(2)
+qc.h(0)
+qc.cx(0, 1)
+pattern, colour_map, routed = brickwork_transpiler.transpile(
+    qc, Statevector.from_label("++"), routing_method="sabre", layout_method="sabre", with_ancillas=False)
+nodes, edges = pattern.get_graph()            # 26 nodes, 28 CZ edges for this circuit
+state = pattern.simulate_pattern(backend="tensornetwork", graph_prep="parallel").to_statevector()
+```
+
+The archived experiment scripts are not entry points of that package: they
+import `src.brickwork_transpiler` from the repository root and write to a
+relative path, which is why the drivers below take the repository root and a
+scratch directory as arguments.
+
+### 3. Install the current MasonQ
+
+Needed only for the Fig. 5b transpilation step. In a second environment, follow
+the installation section of the `master` README, or install it straight from
+the repository:
+
+```bash
+python -m pip install "masonq @ git+ssh://git@github.com/Nonsens24/MasonQ.git@master"
+```
+
+### 4. Reproduce the figures
+
+From the 2025 environment, or any Python with NumPy and matplotlib:
+
+```bash
+cd experiments/reproducible_results/scripts && python make_scaling_figures.py
+```
+
+Seven PNGs appear in `figures/`. With matplotlib 3.10.9 they are byte-identical
+to the submitted files; compare, for example:
+
+```bash
+cmp figures/bqrs_inference_final.png figures/manuscript/figures/bqrs_inference_final.png && echo identical
+```
+
+### 5. Reproduce the minimal B-QRS instance
+
+About a minute in the 2025 environment, from the repository root:
+
+```bash
+MPLBACKEND=Agg python experiments/reproducible_results/scripts/minimal_qrs_instance.py . /tmp/masonq-minimal 12
+```
+
+`/tmp/masonq-minimal/minimal_qrs_instance.txt` should list 16 brick columns,
+390 nodes, 384 measurements, 464 CZ and overlap 1.000000000000, as in
+`data/minimal_qrs_instance.txt`. SABRE is unseeded: a run gives 16 in about
+half to three quarters of its attempts and 21 otherwise, and the script keeps
+the smallest.
+
+### 6. Re-run the archived 2025 experiments
+
+Small sizes, a few minutes, from the 2025 environment and the repository root:
+
+```bash
+python experiments/reproducible_results/scripts/run_archived_experiments.py . /tmp/masonq-rerun qft full nodb hhl
+```
+
+The CSVs appear under
+`/tmp/masonq-rerun/src/ubqc_brickwork_transpiler/experiments/data/output_data/`.
+Against `data/`, input gate counts and Grover iteration counts match exactly and
+brick depths agree to within a few per cent, as recorded under
+[Verification](#verification). Full-size re-runs take hours: QRS up to L = 128,
+QFT up to 29 qubits, the HHL families up to N = 32.
+
+### 7. Reproduce Fig. 5b from scratch
+
+About 15 minutes. Build the circuits in the 2025 environment, transpile them
+with the current MasonQ, then run the semantic check:
+
+```bash
+cd experiments/reproducible_results/scripts/hhl_fixed_clock && python build_circuits.py 5 12 6
+```
+
+```bash
+cd experiments/reproducible_results/scripts/hhl_fixed_clock && python transpile_circuits.py nl5 1 12 fixed_clock_rerun.csv && PYTHONPATH=. python semantic_check.py nl5 1 2 3
+```
+
+Gate counts and fidelities match `data/experiment_hhl_toeplitz_fixed_clock.csv`
+exactly; brick depths agree within 1.5 % under Qiskit 2.4 and within 9 % under
+Qiskit 2.6.
+
+### 8. Check the files
+
+```bash
+cd experiments/reproducible_results && shasum -a 256 -c SHA256SUMS
+```
 
 ## Verification
 

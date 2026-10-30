@@ -11,7 +11,7 @@
 [![Qiskit](https://img.shields.io/badge/qiskit-0.46.3-6929c4.svg)](https://www.ibm.com/quantum/qiskit)
 [![Graphix](https://img.shields.io/badge/graphix-0.3.1-blue.svg)](https://github.com/TeamGraphix/graphix)
 [![Checksums](https://img.shields.io/badge/SHA256SUMS-97_files-lightgrey.svg)](experiments/reproducible_results/SHA256SUMS)
-[![License](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](#license)
+
 
 This branch reproduces the numerical results of *On the Computational
 Complexity of Blind Quantum Machine Learning* (Rex Fleur, Tzula B. Propp,

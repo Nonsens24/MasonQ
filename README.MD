@@ -19,6 +19,11 @@ MasonQ is a brickwork graph (https://arxiv.org/abs/0807.4154) transpiler that co
 equivalence, circuit optimisations, routing swaps, and ancilla management. Includes utilities for layout extraction, ancilla padding, 
 reference-state generation, and robust comparisons up to global phase.
 
+> **Reproducible results.** This branch holds the code state behind the numerical
+> results of [arXiv:2610.17145](https://arxiv.org/abs/2610.17145). The data, the
+> figure scripts, the paper's figure files and the verification record are in
+> [experiments/reproducible_results](experiments/reproducible_results/README.md).
+> The current package lives on `master`.
 
 ---
 
